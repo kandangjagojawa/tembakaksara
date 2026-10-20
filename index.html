@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tembak Aksara Jawa</title>
+
+  <!-- Google Tag Manager -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-HC0LWB9G6X"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-HC0LWB9G6X');
+  </script>
+
+  <!-- React 18 & ReactDOM via ES Modules / CDN -->
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+      }
+    }
+  </script>
+
+  <style>
+    *, ::after, ::before { box-sizing: border-box; border: 0 solid #e5e7eb; }
+    html, body, #root { min-height: 100%; margin: 0; }
+    body {
+      line-height: 1.5;
+      font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button, input, select, textarea { font-family: inherit; font-size: 100%; margin: 0; padding: 0; }
+    button { cursor: pointer; background-color: transparent; background-image: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Script Aplikasi Modul -->
+  <script type="module" src="./jawa-transliteration.js"></script>
+  <script type="module" src="./game.js"></script>
+  
+  <script>
+    // Tab Target Security Handler
+    (function(){
+      function fixLinks(a){
+        var h = a.getAttribute("href");
+        if(!h) return;
+        try {
+          var u = new URL(h, document.baseURI);
+          if((u.protocol === "http:" || u.protocol === "https:") && u.host !== location.host){
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+          }
+        } catch(e){}
+      }
+      function init(){ document.querySelectorAll("a[href]").forEach(fixLinks); }
+      if(document.readyState !== "loading"){ init(); }
+      else { document.addEventListener("DOMContentLoaded", init); }
+      document.addEventListener("click", function(e){
+        var a = e.target && e.target.closest && e.target.closest("a[href]");
+        if(a){ fixLinks(a); }
+      }, true);
+    })();
+  </script>
+</body>
+</html>
