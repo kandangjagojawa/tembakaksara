@@ -100,7 +100,6 @@ export function shuffleArray(arr) {
   return result;
 }
 
-// Kisi posisi tetap tanpa jitter agar antar kotak tidak pernah bertumpuk
 export function generateTargetPositions() {
   const positions = [10, 29, 48, 67, 86];
   return shuffleArray(positions);
