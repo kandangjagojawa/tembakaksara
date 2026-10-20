@@ -1,25 +1,136 @@
 import React, { useState, useEffect, useRef, useCallback } from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
-import {
-  createQuestion,
-  generateTargets,
-  shuffleArray,
-  generateTargetPositions,
-  getRandomPosition
-} from "./jawa-transliteration.js";
 
 const h = React.createElement;
 
-const initialQuestion = createQuestion(1);
+// DATA & FUNGSI TRANSLITERASI (Eksplisit dari File Asli)
+export const AKSARA_POKOK = {
+  h: "ꦲ", n: "ꦤ", c: "ꦕ", r: "ꦫ", k: "ꦏ",
+  d: "ꦢ", t: "ꦠ", s: "ꦱ", w: "ꦮ", l: "ꦭ",
+  p: "ꦥ", dh: "ꦝ", j: "ꦗ", y: "ꦪ", m: "ꦩ",
+  g: "ꦒ", b: "ꦧ", th: "ꦛ", ng: "ꦔ", ny: "ꦚ"
+};
 
+export const AKSARA_KHUSUS = { "rê": "ꦉ", "lê": "ꦊ" };
+export const SANDHANGAN_SWARA = { a: "", i: "ꦶ", u: "ꦸ", "ê": "ꦼ", "é": "ꦺ", "è": "ꦺ", o: "ꦺꦴ" };
+export const PANYIGEG_WANDA = { "": "", ng: "ꦁ", r: "ꦂ", h: "ꦃ" };
+export const VOWEL_CAPITALS = { a: "A", i: "I", u: "U", "ê": "Ê", "é": "É", "è": "È", o: "O" };
+
+export function toJavaneseScript(cons, vowel, suffix) {
+  let base = AKSARA_KHUSUS[cons] ?? AKSARA_POKOK[cons] ?? "ꦏ";
+  let sandhangan = SANDHANGAN_SWARA[vowel] ?? "";
+  let panyigeg = PANYIGEG_WANDA[suffix] ?? "";
+  return base + sandhangan + panyigeg;
+}
+
+export function toLatinText(cons, vowel, suffix) {
+  let baseUpper;
+  if (cons === "rê") baseUpper = "RÊ";
+  else if (cons === "lê") baseUpper = "LÊ";
+  else baseUpper = cons.toUpperCase();
+
+  if (cons === "rê" || cons === "lê") {
+    if (vowel === "a" || vowel === "ê") {
+      return baseUpper + (suffix ? VOWEL_CAPITALS[suffix] ?? suffix.toUpperCase() : "").replace("NG", "").replace("R", "").replace("H", "") + (suffix ? (suffix === "ng" ? "NG" : suffix === "r" ? "R" : suffix === "h" ? "H" : "") : "");
+    }
+    let vowelPart = vowel === "a" ? "" : VOWEL_CAPITALS[vowel] ?? vowel.toUpperCase();
+    let suffixPart = suffix ? (suffix === "ng" ? "NG" : suffix === "r" ? "R" : suffix === "h" ? "H" : suffix.toUpperCase()) : "";
+    if (vowel === "ê") return baseUpper + suffixPart;
+    return baseUpper + vowelPart + suffixPart;
+  }
+
+  let vowelPart = VOWEL_CAPITALS[vowel] ?? vowel.toUpperCase();
+  let suffixPart = suffix ? (suffix === "ng" ? "NG" : suffix === "r" ? "R" : suffix === "h" ? "H" : "") : "";
+  return baseUpper + vowelPart + suffixPart;
+}
+
+export function getQuestionElements(level) {
+  let vowels = [], suffixes = [], consonants = Object.keys(AKSARA_POKOK);
+  if (level === 1) { vowels = ["a", "i", "u"]; suffixes = [""]; }
+  else if (level === 2) { vowels = ["a", "i", "u", "ê", "é", "o"]; suffixes = [""]; }
+  else if (level === 3) { vowels = ["a", "i", "u", "ê", "é", "è", "o"]; suffixes = ["", "ng", "r", "h"]; }
+  else { vowels = ["a", "i", "u", "ê", "é", "è", "o"]; suffixes = ["", "ng", "r", "h"]; consonants = [...consonants, "rê", "lê"]; }
+  return { vowels, suffixes, cons: consonants };
+}
+
+export function getRandomElement(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+export function shuffleArray(arr) {
+  let result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    let temp = result[i]; result[i] = result[j]; result[j] = temp;
+  }
+  return result;
+}
+
+export function generateTargetPositions() {
+  return [11, 31, 50, 69, 89].map((t) => {
+    let offset = (Math.random() - 0.5) * 10;
+    return Math.max(7, Math.min(93, t + offset));
+  });
+}
+
+export function getRandomPosition() { return 10 + Math.random() * 80; }
+
+export function createQuestion(level, consOverride = null) {
+  let elements = getQuestionElements(level);
+  let cons = consOverride ?? getRandomElement(elements.cons);
+  let vowel = getRandomElement(elements.vowels);
+  let suffix = getRandomElement(elements.suffixes);
+  return {
+    id: Math.random().toString(36).slice(2, 8),
+    cons, vowel, suffix,
+    jawa: toJavaneseScript(cons, vowel, suffix),
+    latin: toLatinText(cons, vowel, suffix)
+  };
+}
+
+export function generateTargets(question, level) {
+  let elements = getQuestionElements(level);
+  let list = [{ ...question, isCorrect: true, x: 0 }];
+  let attempts = 0;
+
+  while (list.length < 5 && attempts < 100) {
+    attempts++;
+    let c, v, s;
+    if (Math.random() < 0.7) {
+      c = question.cons;
+      v = getRandomElement(elements.vowels);
+      s = getRandomElement(elements.suffixes);
+    } else {
+      c = getRandomElement(elements.cons.filter((item) => item !== question.cons));
+      v = getRandomElement(elements.vowels);
+      s = getRandomElement(elements.suffixes);
+    }
+
+    let jawaScript = toJavaneseScript(c, v, s);
+    if (jawaScript === question.jawa) continue;
+    if (list.some((item) => item.jawa === jawaScript)) continue;
+
+    let latinText = toLatinText(c, v, s);
+    list.push({
+      id: Math.random().toString(36).slice(2, 8),
+      cons: c, vowel: v, suffix: s,
+      jawa: jawaScript, latin: latinText,
+      isCorrect: false, x: 0
+    });
+  }
+
+  let shuffled = shuffleArray(list);
+  let positions = generateTargetPositions();
+  return shuffled.map((item, idx) => ({ ...item, x: positions[idx] }));
+}
+
+// KOMPONEN UTAMA GAME
 export function BedhilAksaraJawaGame() {
   const [level, setLevel] = useState(1);
   const [score, setScore] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [targetMode, setTargetMode] = useState("jatuh");
 
-  const [currentQuestion, setCurrentQuestion] = useState(initialQuestion);
-  const [targets, setTargets] = useState(() => generateTargets(initialQuestion, 1));
+  const [currentQuestion, setCurrentQuestion] = useState(() => createQuestion(1));
+  const [targets, setTargets] = useState(() => generateTargets(createQuestion(1), 1));
   const [cannonX, setCannonX] = useState(50);
   const [projectiles, setProjectiles] = useState([]);
 
@@ -33,27 +144,25 @@ export function BedhilAksaraJawaGame() {
 
   const gameAreaRef = useRef(null);
   const targetsRef = useRef(targets);
-  const cannonXRef = useRef(50);
+  const projectilesRef = useRef(projectiles);
+  const animFrameRef = useRef(0);
   const isDraggingRef = useRef(false);
+
+  useEffect(() => { targetsRef.current = targets; }, [targets]);
+  useEffect(() => { projectilesRef.current = projectiles; }, [projectiles]);
+
+  useEffect(() => {
+    let q = createQuestion(level);
+    setCurrentQuestion(q);
+    setTargets(generateTargets(q, level));
+  }, []);
+
   const hitCorrectRef = useRef(() => {});
   const hitWrongRef = useRef(() => {});
 
-  const updateCannon = useCallback((val) => {
-    setCannonX((prev) => {
-      const nextVal = typeof val === "function" ? val(prev) : val;
-      const clamped = Math.max(6, Math.min(94, nextVal));
-      cannonXRef.current = clamped;
-      return clamped;
-    });
-  }, []);
-
-  useEffect(() => {
-    targetsRef.current = targets;
-  }, [targets]);
-
   const handleHitCorrect = useCallback((hitTarget) => {
     setScore((prevScore) => {
-      const nextScore = prevScore + 10;
+      let nextScore = prevScore + 10;
       if (nextScore >= 50 && level === 1) setLevel(2);
       else if (nextScore >= 120 && level === 2) setLevel(3);
       else if (nextScore >= 220 && level === 3) setLevel(4);
@@ -63,79 +172,78 @@ export function BedhilAksaraJawaGame() {
     setHitEffect({ x: hitTarget.x, y: 22, text: "+10" });
     setTimeout(() => setHitEffect(null), 600);
 
-    targetsRef.current = targetsRef.current.map((t) =>
-      t.id === hitTarget.id ? { ...t, falling: true } : t
+    setIsShuffling(true);
+    setTargets((prevTargets) =>
+      prevTargets.map((item) =>
+        item.id === hitTarget.id ? { ...item, falling: true } : { ...item, shuffling: true }
+      )
     );
-    setTargets([...targetsRef.current]);
 
     setTimeout(() => {
-      setIsShuffling(true);
-      const activeLevel = level + (score >= 50 ? 1 : 0) > 4 ? 4 : level;
-      const nextQ = createQuestion(activeLevel);
+      let activeLevel = level + (score > 50 ? 1 : 0) > 4 ? 4 : level;
+      let nextQ = createQuestion(activeLevel);
       setCurrentQuestion(nextQ);
 
       if (targetMode === "ganti") {
-        const newTargets = generateTargets(nextQ, activeLevel);
-        targetsRef.current = newTargets;
-        setTargets(newTargets);
+        let newTargets = generateTargets(nextQ, activeLevel);
+        let shuffledNew = shuffleArray(newTargets);
+        let pos = generateTargetPositions();
+        setTargets(shuffledNew.map((item, idx) => ({ ...item, x: pos[idx], falling: false })));
       } else {
-        const remaining = targetsRef.current
-          .filter((t) => t.id !== hitTarget.id && !t.falling)
-          .filter((t) => t.jawa !== nextQ.jawa);
+        setTargets((prevTargets) => {
+          let remaining = prevTargets
+            .filter((item) => item.id !== hitTarget.id && !item.falling)
+            .filter((item) => item.jawa !== nextQ.jawa);
 
-        const dummyList = [];
-        let safety = 0;
-        while (remaining.length + dummyList.length < 4 && safety < 100) {
-          safety++;
-          const candidate = createQuestion(activeLevel);
-          if (candidate.jawa === nextQ.jawa) continue;
-          if (remaining.some((item) => item.jawa === candidate.jawa)) continue;
-          if (dummyList.some((item) => item.jawa === candidate.jawa)) continue;
-          dummyList.push({ ...candidate, isCorrect: false, x: 0 });
-        }
+          let dummyList = [];
+          while (remaining.length + dummyList.length < 4) {
+            let candidate = createQuestion(activeLevel);
+            if (candidate.jawa === nextQ.jawa) continue;
+            if (remaining.some((item) => item.jawa === candidate.jawa)) continue;
+            if (dummyList.some((item) => item.jawa === candidate.jawa)) continue;
+            dummyList.push({ ...candidate, isCorrect: false, x: 0 });
+          }
 
-        const combined = [
-          ...[...remaining, ...dummyList].slice(0, 4),
-          { ...nextQ, isCorrect: true, x: 0 }
-        ];
+          let combined = [
+            ...[...remaining, ...dummyList].slice(0, 4),
+            { ...nextQ, isCorrect: true, x: 0 }
+          ];
 
-        const shuffled = shuffleArray(combined);
-        const pos = generateTargetPositions();
-        const updated = shuffled.map((item, idx) => ({ ...item, x: pos[idx], falling: false }));
-        targetsRef.current = updated;
-        setTargets(updated);
+          let shuffledCombined = shuffleArray(combined);
+          let posCombined = generateTargetPositions();
+          return shuffledCombined.map((item, idx) => ({ ...item, x: posCombined[idx], falling: false }));
+        });
       }
 
-      updateCannon(getRandomPosition());
+      setCannonX(getRandomPosition());
 
       setTimeout(() => {
         setIsShuffling(false);
-      }, 350);
-    }, 280);
-  }, [level, targetMode, score, updateCannon]);
+        setTargets((prevTargets) => prevTargets.map((item) => ({ ...item, shuffling: false })));
+      }, 380);
+    }, 300);
+  }, [level, targetMode, score]);
 
   const handleHitWrong = useCallback((hitTarget) => {
-    targetsRef.current = targetsRef.current.map((t) =>
-      t.id === hitTarget.id ? { ...t, shaking: true } : t
+    setTargets((prevTargets) =>
+      prevTargets.map((item) => (item.id === hitTarget.id ? { ...item, shaking: true } : item))
     );
-    setTargets([...targetsRef.current]);
 
     setTimeout(() => {
-      targetsRef.current = targetsRef.current.map((t) =>
-        t.id === hitTarget.id ? { ...t, shaking: false } : t
+      setTargets((prevTargets) =>
+        prevTargets.map((item) => ({ ...item, shaking: false }))
       );
-      setTargets([...targetsRef.current]);
     }, 400);
 
-    setScore((prev) => Math.max(0, prev - 5));
+    setScore((prevScore) => Math.max(0, prevScore - 5));
     setHearts((prevHearts) => {
-      const next = prevHearts - 1;
-      if (next <= 0) setGameOver(true);
-      return next;
+      let nextHearts = prevHearts - 1;
+      if (nextHearts <= 0) setGameOver(true);
+      return nextHearts;
     });
 
     setWrongCounts((prev) => {
-      const key = `${currentQuestion.latin} → ${currentQuestion.jawa}`;
+      let key = currentQuestion.latin + " → " + currentQuestion.jawa;
       return { ...prev, [key]: (prev[key] ?? 0) + 1 };
     });
 
@@ -148,122 +256,85 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // Deteksi Fisika: Hanya set falling jika BENAR
+  // OPTIMISASI RAM: Loop Peluru Fisika menggunakan cancelAnimationFrame bersih
   useEffect(() => {
-    if (projectiles.length === 0) return;
-
-    let animId;
     const updatePhysics = () => {
-      const hits = [];
-
       setProjectiles((prevProjectiles) => {
-        const remaining = [];
-        for (let proj of prevProjectiles) {
-          const nextY = proj.y + 3.8;
+        let moved = prevProjectiles.map((p) => ({ ...p, y: p.y + 3.4 }));
+        let remaining = [];
 
-          if (nextY >= 68 && nextY <= 96) {
-            const candidates = targetsRef.current.filter(
-              (t) => !t.falling && Math.abs(t.x - proj.x) <= 10.0
+        for (let p of moved) {
+          if (p.y > 82) {
+            let hitTarget = targetsRef.current.find(
+              (t) => !t.falling && Math.abs(t.x - p.x) < 11
             );
 
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => Math.abs(a.x - proj.x) - Math.abs(b.x - proj.x));
-              const hitTarget = candidates[0];
-              
-              // HANYA tandai jatuh jika target BENAR
-              if (hitTarget.isCorrect) {
-                hitTarget.falling = true;
-              }
-              
-              hits.push(hitTarget);
-              continue; // Peluru hancur
+            if (hitTarget) {
+              if (hitTarget.isCorrect) hitCorrectRef.current(hitTarget);
+              else hitWrongRef.current(hitTarget);
+              continue; // Peluru hilang begitu menumbuk target
             }
+
+            if (p.y > 96) continue; // Peluru hilang jika lewat batas atas
           }
 
-          if (nextY <= 96) {
-            remaining.push({ ...proj, y: nextY });
-          }
+          if (p.y <= 96) remaining.push(p);
         }
+
         return remaining;
       });
 
-      if (hits.length > 0) {
-        for (let target of hits) {
-          if (target.isCorrect) hitCorrectRef.current(target);
-          else hitWrongRef.current(target);
-        }
-      }
-
-      animId = requestAnimationFrame(updatePhysics);
+      animFrameRef.current = requestAnimationFrame(updatePhysics);
     };
 
-    animId = requestAnimationFrame(updatePhysics);
-    return () => cancelAnimationFrame(animId);
-  }, [projectiles.length]);
+    animFrameRef.current = requestAnimationFrame(updatePhysics);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
 
   const shoot = useCallback(() => {
     if (gameOver) return;
-    const bulletId = Math.random().toString(36).slice(2, 8);
+    let bulletId = Math.random().toString(36).slice(2, 8);
     setIsRecoil(true);
     setTimeout(() => setIsRecoil(false), 180);
-
-    setProjectiles((prev) => [...prev, { id: bulletId, x: cannonXRef.current, y: 26 }]);
-  }, [gameOver]);
+    setProjectiles((prev) => [...prev, { id: bulletId, x: cannonX, y: 26 }]);
+  }, [cannonX, gameOver]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        shoot();
-      }
-      if (e.code === "ArrowLeft") {
-        updateCannon((prev) => prev - 6);
-      }
-      if (e.code === "ArrowRight") {
-        updateCannon((prev) => prev + 6);
-      }
+      if (e.code === "Space") { e.preventDefault(); shoot(); }
+      if (e.code === "ArrowLeft") setCannonX((prev) => Math.max(5, prev - 6));
+      if (e.code === "ArrowRight") setCannonX((prev) => Math.min(95, prev + 6));
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shoot, updateCannon]);
+  }, [shoot]);
 
-  const getClientX = (e) => {
-    if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
-    return e.clientX;
+  const updateCannonPosition = (clientX) => {
+    if (!gameAreaRef.current) return;
+    let rect = gameAreaRef.current.getBoundingClientRect();
+    let percent = ((clientX - rect.left) / rect.width) * 100;
+    setCannonX(Math.max(6, Math.min(94, percent)));
   };
 
   const handlePointerDown = (e) => {
     isDraggingRef.current = true;
-    if (e.target.setPointerCapture && e.pointerId !== undefined) {
-      try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
-    }
-    updateCannonPosition(getClientX(e));
+    e.target.setPointerCapture(e.pointerId);
+    updateCannonPosition(e.clientX);
   };
 
   const handlePointerMove = (e) => {
     if (!isDraggingRef.current) return;
-    updateCannonPosition(getClientX(e));
+    updateCannonPosition(e.clientX);
   };
 
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
-  };
-
-  const updateCannonPosition = (clientX) => {
-    if (!gameAreaRef.current) return;
-    const rect = gameAreaRef.current.getBoundingClientRect();
-    const percent = ((clientX - rect.left) / rect.width) * 100;
-    updateCannon(percent);
-  };
+  const handlePointerUp = () => { isDraggingRef.current = false; };
 
   const changeQuestion = () => {
-    const q = createQuestion(level);
+    let q = createQuestion(level);
     setCurrentQuestion(q);
-    const newT = generateTargets(q, level);
-    targetsRef.current = newT;
-    setTargets(newT);
-    updateCannon(getRandomPosition());
+    setTargets(generateTargets(q, level));
+    setCannonX(getRandomPosition());
     setIsShuffling(true);
     setTimeout(() => setIsShuffling(false), 350);
   };
@@ -274,13 +345,11 @@ export function BedhilAksaraJawaGame() {
     setLevel(1);
     setGameOver(false);
     setWrongCounts({});
-    const q = createQuestion(1);
+    let q = createQuestion(1);
     setCurrentQuestion(q);
-    const newT = generateTargets(q, 1);
-    targetsRef.current = newT;
-    setTargets(newT);
+    setTargets(generateTargets(q, 1));
     setProjectiles([]);
-    updateCannon(50);
+    setCannonX(50);
     setIsShuffling(false);
   };
 
@@ -289,249 +358,62 @@ export function BedhilAksaraJawaGame() {
     .slice(0, 6);
 
   return h("div", { className: "app-root" }, [
-    h("style", { key: "css" }, `
-      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Javanese&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap');
-      * { box-sizing: border-box; touch-action: manipulation; }
-      body { margin:0; overflow-x:hidden; }
-      .app-root {
-        min-height: 100vh;
-        background:
-          radial-gradient(1200px 600px at 20% -10%, #fff7e6 0%, transparent 60%),
-          radial-gradient(900px 500px at 90% 0%, #ffe0b2 0%, transparent 50%),
-          linear-gradient(180deg, #fdf6e3 0%, #efebe9 55%, #d7ccc8 100%);
-        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-        color: #3e2723;
-        display: flex; flex-direction: column; align-items: center;
-      }
-      .batik {
-        position: absolute; inset:0; opacity:0.07;
-        background-image:
-          repeating-linear-gradient(45deg, #5d4037 0 1px, transparent 1px 12px),
-          repeating-linear-gradient(-45deg, #8d6e63 0 1px, transparent 1px 18px);
-        pointer-events:none;
-      }
-      .header {
-        width:100%; max-width:1100px; display:flex; justify-content:space-between; align-items:center;
-        padding: 14px 18px; background: #3e2723; color:#ffecb3;
-        position: sticky; top:0; z-index:10; box-shadow: 0 4px 18px rgba(62,39,35,0.3);
-      }
-      .brand { display:flex; flex-direction:column; line-height:1.1 }
-      .brand .latin { font-weight:800; letter-spacing:0.04em; font-size: 16px; }
-      .brand .jawa { font-family:'Noto Sans Javanese', serif; font-size:20px; color:#ffcc80; margin-top:2px }
-      .stats { display:flex; gap:12px; align-items:center }
-      .stat-pill { background:#4e342e; border:1px solid #6d4c41; padding:6px 12px; border-radius:999px; font-size:13px; display:flex; gap:6px; align-items:center }
-      .hearts { letter-spacing:2px }
-      .game-shell { width:100%; max-width:1100px; display:grid; grid-template-columns: 1fr 300px; gap:16px; padding:16px; }
-      @media (max-width: 860px) { .game-shell { grid-template-columns:1fr; padding:8px; } }
-      .game-area {
-        position:relative; height: 600px;
-        background: linear-gradient(180deg, #fff8e1 0%, #ffe0b2 32%, #f5d0a0 62%, #d7a76f 100%);
-        border-radius: 18px; overflow:hidden; border: 3px solid #5d4037;
-        box-shadow: inset 0 0 0 4px #ffecb3, 0 12px 30px rgba(62,39,35,0.18);
-        display:flex; flex-direction:column; touch-action: none;
-      }
-      @media (max-width: 600px) { .game-area { height: 560px; } }
-      .field-top { position:relative; flex:1; min-height: 320px; }
-      .target-row { position:absolute; top:18px; left:0; right:0; height:110px; }
-      .target-box {
-        position:absolute; top:0; width: 84px; height: 92px; transform: translateX(-50%);
-        background: linear-gradient(180deg, #fff3e0 0%, #ffcc80 100%);
-        border: 3px solid #5d4037; border-radius: 14px;
-        box-shadow: 0 6px 0 #3e2723, 0 10px 18px rgba(0,0,0,0.18);
-        display:flex; align-items:center; justify-content:center;
-        font-family:'Noto Sans Javanese', serif; font-size: 38px; color:#3e2723;
-        transition: left 0.45s cubic-bezier(.2,.8,.2,1), transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.28s;
-        animation: float 3s ease-in-out infinite; will-change: left, transform;
-      }
-      .target-box.falling {
-        transform: translateX(-50%) translateY(350px) rotate(25deg) scale(0.5) !important;
-        opacity: 0 !important;
-        pointer-events: none;
-        transition: transform 0.35s ease-in, opacity 0.3s ease-in !important;
-      }
-      .target-box.shaking { animation: shake 0.36s ease; }
-      .target-box.shuffling { transition: left 0.42s cubic-bezier(.34,1.56,.64,1), transform 0.32s ease; z-index: 2; animation: shufflePop 0.42s ease; }
-      @keyframes shufflePop { 0% { transform: translateX(-50%) scale(1); } 40% { transform: translateX(-50%) scale(1.08) translateY(-8px); } 100% { transform: translateX(-50%) scale(1); } }
-      @keyframes float { 0%,100%{ transform:translateX(-50%) translateY(0)} 50%{ transform:translateX(-50%) translateY(-6px)} }
-      @keyframes shake { 0%,100%{ transform:translateX(-50%) } 20%{ transform:translateX(calc(-50% - 8px)) } 40%{ transform:translateX(calc(-50% + 8px)) } 60%{ transform:translateX(calc(-50% - 6px)) } 80%{ transform:translateX(calc(-50% + 6px)) } }
-      .shuffle-indicator {
-        position:absolute; top:108px; left:50%; transform:translateX(-50%);
-        background:#3e2723; color:#ffecb3; font-size:10px; font-weight:800; letter-spacing:0.08em;
-        padding:4px 10px; border-radius:999px; border:1px solid #ffcc80; opacity:0; pointer-events:none; transition: opacity 0.2s;
-      }
-      .shuffle-indicator.show { opacity:1; animation: pulse 0.9s ease infinite; }
-      @keyframes pulse { 0%,100%{ transform:translateX(-50%) scale(1)} 50%{ transform:translateX(-50%) scale(1.05)} }
-      .cannon-stage { position: relative; height: 168px; width: 100%; z-index: 5; pointer-events:none; }
-      .rail {
-        position:absolute; left:2%; right:2%; bottom:22px; height:28px;
-        background: linear-gradient(90deg, rgba(0,0,0,0.15) 0 2px, transparent 2px 18px), linear-gradient(180deg, #8d6e63 0%, #5d4037 55%, #3e2723 100%);
-        border: 2px solid #3e2723; border-radius: 8px; box-shadow: inset 0 2px 0 rgba(255,255,255,0.25), 0 4px 0 #271c19;
-        display:flex; align-items:center; justify-content:space-between; padding: 0 6px;
-      }
-      .rail-tick { width:3px; height:10px; background:#271c19; opacity:0.6; border-radius:2px }
-      .rail-tick.big { height:16px; width:3px; background:#ffecb3; opacity:1 }
-      .cannon-wrap {
-        position:absolute; bottom:28px; width: 220px; height: 150px; transform: translateX(-50%);
-        display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
-        z-index:6; pointer-events:none; filter: drop-shadow(0 12px 10px rgba(0,0,0,0.25));
-      }
-      .cannon-wrap.recoil { animation: recoil 0.18s ease; }
-      .cannon-wrap.jump { transition: left 0.38s cubic-bezier(.34,1.56,.64,1); }
-      @keyframes recoil { 0%{ transform:translateX(-50%) translateY(0) rotate(0)} 35%{ transform:translateX(-50%) translateY(6px) rotate(-1.2deg)} 100%{ transform:translateX(-50%) translateY(0) rotate(0)} }
-      .cannon-shadow { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); width:120px; height:18px; background: radial-gradient(ellipse at center, rgba(0,0,0,0.35) 0%, transparent 70%); z-index:0; border-radius:50%; }
-      .laser {
-        position:absolute; bottom:130px; width:2px; top:90px; transform: translateX(-50%);
-        background: repeating-linear-gradient(180deg, rgba(255,235,59,0.9) 0 10px, transparent 10px 18px);
-        box-shadow: 0 0 8px rgba(255,235,59,0.8), 0 0 18px rgba(255,111,0,0.6); z-index:4; pointer-events:none;
-      }
-      .laser::after { content:""; position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:10px solid #ffeb3b; filter: drop-shadow(0 0 6px #ffeb3b); }
-      .position-arrow { position:absolute; bottom:50px; width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:12px solid #ff6f00; transform: translateX(-50%); filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); z-index:7; }
-      .cannon-visual { position:relative; width:100%; height:116px; display:flex; flex-direction:column; align-items:center; }
-      .cannon-mouth { position:relative; width: 54px; height: 30px; background: radial-gradient(ellipse at center, #1a1a1a 0%, #000 65%); border: 3px solid #2b1a14; border-bottom:0; border-radius: 12px 12px 4px 4px; box-shadow: inset 0 4px 8px rgba(255,255,255,0.15), 0 -2px 0 #ffcc80; z-index:3; }
-      .cannon-mouth::after { content:""; position:absolute; inset:5px; background: radial-gradient(ellipse at center, #3e2723 0%, #000 80%); border-radius: 8px 8px 2px 2px; }
-      .muzzle-flash { position:absolute; top:-12px; left:50%; transform:translateX(-50%); width: 42px; height: 26px; background: radial-gradient(ellipse at center, #fffde7 0%, #ffeb3b 30%, #ff6f00 60%, transparent 75%); border-radius:50%; opacity:0; pointer-events:none; }
-      .cannon-wrap.recoil .muzzle-flash { animation: flash 0.18s ease; }
-      @keyframes flash { 0%{ opacity:0; transform:translateX(-50%) scale(0.3)} 30%{ opacity:1; transform:translateX(-50%) scale(1.3)} 100%{ opacity:0; transform:translateX(-50%) scale(1.8)} }
-      .cannon-body {
-        width: 188px; height: 82px; margin-top:-6px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 18%), linear-gradient(180deg, #6d4c41 0%, #4e342e 22%, #3e2723 55%, #271c19 100%);
-        border: 4px solid #1c110f; border-radius: 22px; box-shadow: inset 0 3px 0 rgba(255,255,255,0.22), inset 0 -6px 10px rgba(0,0,0,0.45), 0 8px 0 #1c110f;
-        display:flex; align-items:center; justify-content:center; position:relative; z-index:2;
-      }
-      .cannon-body::before, .cannon-body::after { content:""; position:absolute; top:14px; bottom:14px; width:14px; background: linear-gradient(180deg, #8d6e63, #4e342e); border-radius: 6px; border:1px solid #271c19; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3); }
-      .cannon-body::before { left:8px; }
-      .cannon-body::after { right:8px; }
-      .plaque { background: #fffdf5; border: 4px solid #1c110f; border-radius: 14px; padding: 10px 18px 12px; min-width: 116px; text-align:center; box-shadow: 0 3px 0 #1c110f, inset 0 1px 0 #fff, 0 6px 12px rgba(0,0,0,0.18); position:relative; z-index:3; transform: rotate(-1.2deg); }
-      .plaque-latin { font-weight:900; font-size:30px; line-height:1; letter-spacing:0.07em; color:#1a1a1a; text-shadow: 0 1px 0 #fff; font-family: 'Plus Jakarta Sans', sans-serif; }
-      .cannon-wheels { display:flex; gap:78px; margin-top:-12px; z-index:1; }
-      .wheel { width:38px; height:38px; border-radius:50%; background: radial-gradient(circle at 30% 30%, #a1887f, #5d4037 55%, #3e2723); border:3px solid #1c110f; box-shadow: 0 4px 0 #1c110f, inset 0 2px 0 rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; position:relative; }
-      .wheel::before { content:""; width:10px; height:10px; background:#ffecb3; border:2px solid #1c110f; border-radius:50%; }
-      .wheel::after { content:""; position:absolute; inset:5px; border:2px dashed rgba(0,0,0,0.25); border-radius:50%; }
-      .projectile {
-        position:absolute; width:26px; height:26px; transform: translateX(-50%);
-        background: radial-gradient(circle at 30% 30%, #fff8e1, #ffb300 55%, #ff6f00);
-        border:2px solid #1c110f; border-radius:50%; box-shadow: 0 0 14px rgba(255,179,0,0.9), 0 0 26px rgba(255,111,0,0.6);
-        display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#3e2723; z-index:6;
-      }
-      .hit-effect { position:absolute; transform:translateX(-50%); font-weight:800; font-size:20px; color:#bf360c; text-shadow: 0 1px 0 #fff; animation: pop 0.6s ease forwards; pointer-events:none; z-index:8; }
-      @keyframes pop { 0%{ transform:translateX(-50%) translateY(0) scale(0.6); opacity:0 } 20%{ opacity:1; transform:translateX(-50%) translateY(-8px) scale(1.2)} 100%{ opacity:0; transform:translateX(-50%) translateY(-36px) scale(1)} }
-      .controls { display:grid; grid-template-columns: 1.3fr 0.9fr; gap:12px; padding:12px 12px 14px; background: linear-gradient(180deg, #fff8e1 0%, #ffecb3 100%); border-top:3px solid #5d4037; z-index:10; border-radius: 0 0 15px 15px; touch-action:none; }
-      @media (max-width: 600px) { .controls { grid-template-columns:1fr; } }
-      .control-box { border:2px dashed #a1887f; border-radius:14px; padding:10px; background: #ffffffb8; backdrop-filter: blur(4px); touch-action:none; user-select:none; -webkit-user-select:none; }
-      .control-label { font-size:11px; font-weight:800; letter-spacing:0.08em; color:#6d4c41; margin-bottom:6px; display:flex; justify-content:space-between }
-      .slider-track { height:52px; background: linear-gradient(90deg, #efebe9, #d7ccc8); border:2px solid #8d6e63; border-radius:999px; position:relative; overflow:hidden; cursor: ew-resize; touch-action:none; }
-      .slider-fill { position:absolute; left:0; top:0; bottom:0; background: linear-gradient(90deg, rgba(255,179,0,0.25), rgba(255,111,0,0.15)); border-right:2px solid #ff6f00; }
-      .slider-thumb {
-        position:absolute; top:50%; width:52px; height:42px; transform:translate(-50%,-50%);
-        background: linear-gradient(180deg, #5d4037, #3e2723); border-radius:999px; border:3px solid #ffecb3;
-        display:flex; align-items:center; justify-content:center; color:#ffecb3; font-size:18px; font-family:'Plus Jakarta Sans', sans-serif; font-weight:800;
-        box-shadow: 0 4px 0 #3e2723; z-index:2;
-      }
-      .slider-ticks { position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between; padding:0 12px; opacity:0.35 }
-      .slider-ticks span { width:2px; height:14px; background:#5d4037; border-radius:2px }
-      .shoot-btn {
-        width:100%; height:62px; background: linear-gradient(180deg, #ff6f00 0%, #e65100 100%);
-        border:3px solid #1c110f; border-radius:14px; font-weight:900; font-size:17px; color:#fff8e1; letter-spacing:0.06em;
-        box-shadow: 0 6px 0 #1c110f, 0 8px 16px rgba(0,0,0,0.22); cursor:pointer; touch-action: manipulation;
-        display:flex; align-items:center; justify-content:center; gap:8px; user-select:none; -webkit-user-select:none;
-      }
-      .shoot-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #3e2723; }
-      .side-panel { display:flex; flex-direction:column; gap:12px; }
-      .card { background:#fffdf5; border:2px solid #5d4037; border-radius:16px; padding:14px; box-shadow: 0 6px 0 #d7ccc8; }
-      .card h3 { margin:0 0 8px 0; font-size:14px; letter-spacing:0.04em }
-      .toggle-row { display:flex; gap:8px; background:#efebe9; padding:4px; border-radius:999px; border:1px solid #bcaaa4 }
-      .toggle-btn { flex:1; padding:8px 10px; border-radius:999px; border:0; font-weight:700; font-size:12px; cursor:pointer }
-      .toggle-btn.active { background:#3e2723; color:#ffecb3; box-shadow:0 2px 6px rgba(0,0,0,0.2) }
-      .toggle-btn:not(.active) { background:transparent; color:#6d4c41 }
-      .level-dots { display:flex; gap:6px }
-      .dot { width:28px; height:28px; border-radius:50%; border:2px solid #5d4037; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; cursor:pointer }
-      .dot.active { background:#ffb300; }
-      .paugeran-grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:12px }
-      .paugeran-item { background:#fff3e0; border:1px solid #d7ccc8; border-radius:10px; padding:8px; display:flex; justify-content:space-between; align-items:center }
-      .paugeran-item b { font-family:'Noto Sans Javanese'; font-size:18px }
-      .overlay { position:absolute; inset:0; background:rgba(62,39,35,0.86); backdrop-filter: blur(6px); display:flex; align-items:center; justify-content:center; z-index:20; border-radius:18px; }
-      .modal { background:#fffdf5; border:3px solid #ffb300; border-radius:20px; padding:20px; width:90%; max-width:360px; text-align:center; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
-      .btn-primary { background:#3e2723; color:#ffecb3; border:0; padding:12px 18px; border-radius:999px; font-weight:800; cursor:pointer; width:100%; margin-top:12px }
-      .btn-secondary { background:#efebe9; color:#5d4037; border:2px solid #bcaaa4; padding:10px 14px; border-radius:999px; font-weight:700; cursor:pointer; width:100%; margin-top:8px }
-      .jawa-title { font-family:'Noto Sans Javanese'; font-size:28px; color:#3e2723; line-height:1 }
-      @media (max-width: 600px){
-        .header { padding:10px 14px }
-        .brand .latin { font-size:14px }
-        .brand .jawa { font-size:16px }
-        .target-box { width:62px; height:70px; font-size:26px }
-        .cannon-wrap { width:170px; height:120px }
-        .cannon-body { width:150px; height:68px }
-        .plaque-latin { font-size:20px }
-        .cannon-wheels { gap:52px }
-        .wheel { width:28px; height:28px }
-      }
-    `),
-
     // HEADER BAR
-    h("div", { className: "header", key: "header" }, [
-      h("div", { className: "brand", key: "brand" }, [
+    h("div", { className: "header", key: "hdr" }, [
+      h("div", { className: "brand", key: "brd" }, [
         h("div", { className: "latin", key: "l" }, "BEDHIL AKSARA JAWA"),
         h("div", { className: "jawa", key: "j" }, "ꦧꦼꦝꦶꦭ꧀ ꦲꦏ꧀ꦱꦫ ꦗꦮ")
       ]),
-      h("div", { className: "stats", key: "stats" }, [
-        h("div", { className: "stat-pill", key: "s" }, `⭐ ${score}`),
-        h("div", { className: "stat-pill", key: "lv" }, `Lv ${level}`),
+      h("div", { className: "stats", key: "st" }, [
+        h("div", { className: "stat-pill", key: "s" }, "⭐ ", score),
+        h("div", { className: "stat-pill", key: "lv" }, "Lv ", level),
         h("div", { className: "stat-pill hearts", key: "h" }, "❤".repeat(hearts) + "♡".repeat(3 - hearts))
       ])
     ]),
 
     // GAME SHELL
-    h("div", { className: "game-shell", key: "shell" }, [
-      h("div", { className: "game-area", ref: gameAreaRef, key: "area" }, [
-        h("div", { className: "batik", key: "batik" }),
-        h("div", { className: "field-top", key: "top" }, [
-          h("div", { key: "bg", style: { position: "absolute", bottom: 0, left: 0, right: 0, height: 90, background: "linear-gradient(180deg, transparent, rgba(93,64,55,0.18))", pointerEvents: "none" } }),
+    h("div", { className: "game-shell", key: "shl" }, [
+      h("div", { className: "game-area", ref: gameAreaRef, key: "ga" }, [
+        h("div", { className: "batik", key: "btk" }),
+        h("div", { className: "field-top", key: "ft" }, [
+          h("div", { style: { position: "absolute", bottom: 0, left: 0, right: 0, height: 90, background: "linear-gradient(180deg, transparent, rgba(93,64,55,0.18))", pointerEvents: "none" }, key: "bg" }),
           
           // TARGET ROW
-          h("div", { className: "target-row", key: "targets" }, [
-            ...targets.map((t) =>
+          h("div", { className: "target-row", key: "tr" }, [
+            targets.map((item) =>
               h("div", {
-                key: t.id,
-                className: `target-box ${t.falling ? "falling" : ""} ${t.shaking ? "shaking" : ""} ${!t.falling && (t.shuffling || isShuffling) ? "shuffling" : ""}`,
-                style: { left: `${t.x}%`, animationDelay: `${(t.x % 7) * 0.2}s` }
-              }, t.jawa)
+                key: item.id,
+                className: `target-box ${item.falling ? "falling" : ""} ${item.shaking ? "shaking" : ""} ${item.shuffling || isShuffling ? "shuffling" : ""}`,
+                style: { left: `${item.x}%`, animationDelay: `${(item.x % 7) * 0.2}s` }
+              }, item.jawa)
             ),
-            hitEffect && h("div", { key: "he", className: "hit-effect", style: { left: `${hitEffect.x}%`, top: `${hitEffect.y}%` } }, hitEffect.text),
-            h("div", { key: "si", className: `shuffle-indicator ${isShuffling ? "show" : ""}` }, "🔀 ACAK POSISI...")
+            hitEffect && h("div", { className: "hit-effect", style: { left: `${hitEffect.x}%`, top: `${hitEffect.y}%` }, key: "he" }, hitEffect.text),
+            h("div", { className: `shuffle-indicator ${isShuffling ? "show" : ""}`, key: "si" }, "🔀 ACAK POSISI...")
           ]),
 
           // LASER
-          h("div", {
-            key: "laser",
-            className: "laser",
-            style: { left: `${cannonX}%` }
-          }),
+          h("div", { className: "laser", style: { left: `${cannonX}%`, transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)" }, key: "lsr" }),
 
           // PROJECTILES
-          ...projectiles.map((p) =>
-            h("div", { key: p.id, className: "projectile", style: { left: `${p.x}%`, bottom: `${p.y}%` } }, currentQuestion.latin.slice(0, 2))
+          projectiles.map((p) =>
+            h("div", { className: "projectile", style: { left: `${p.x}%`, bottom: `${p.y}%` }, key: p.id }, currentQuestion.latin.slice(0, 2))
           ),
 
-          h("div", {
-            key: "arrow",
-            className: "position-arrow",
-            style: { left: `${cannonX}%` }
-          })
+          // POSITION ARROW
+          h("div", { className: "position-arrow", style: { left: `${cannonX}%`, transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)" }, key: "pa" })
         ]),
 
         // CANNON STAGE
-        h("div", { className: "cannon-stage", key: "stage" }, [
-          h("div", { className: "rail", key: "rail" },
-            Array.from({ length: 20 }).map((_, idx) =>
-              h("div", { key: idx, className: `rail-tick ${idx % 5 === 0 ? "big" : ""}` })
-            )
+        h("div", { className: "cannon-stage", key: "cs" }, [
+          h("div", { className: "rail", key: "rl" },
+            Array.from({ length: 20 }).map((_, idx) => h("div", { className: `rail-tick ${idx % 5 === 0 ? "big" : ""}`, key: idx }))
           ),
           h("div", {
-            key: "cannon",
             className: `cannon-wrap ${isRecoil ? "recoil" : ""} ${isShuffling ? "jump" : ""}`,
-            style: { left: `${cannonX}%` }
+            style: { left: `${cannonX}%`, transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)" },
+            key: "cw"
           }, [
-            h("div", { className: "cannon-shadow", key: "cs" }),
+            h("div", { className: "cannon-shadow", key: "sh" }),
             h("div", { className: "cannon-visual", key: "cv" }, [
               h("div", { className: "cannon-mouth", key: "cm" }, h("div", { className: "muzzle-flash" })),
               h("div", { className: "cannon-body", key: "cb" },
@@ -539,7 +421,7 @@ export function BedhilAksaraJawaGame() {
                   h("div", { className: "plaque-latin" }, currentQuestion.latin)
                 )
               ),
-              h("div", { className: "cannon-wheels", key: "cw" }, [
+              h("div", { className: "cannon-wheels", key: "cw2" }, [
                 h("div", { className: "wheel", key: "w1" }),
                 h("div", { className: "wheel", key: "w2" })
               ])
@@ -550,62 +432,48 @@ export function BedhilAksaraJawaGame() {
         // CONTROLS
         h("div", { className: "controls", key: "ctrls" }, [
           h("div", {
-            key: "c1",
             className: "control-box",
             onPointerDown: handlePointerDown,
             onPointerMove: handlePointerMove,
             onPointerUp: handlePointerUp,
             onPointerLeave: handlePointerUp,
-            onTouchStart: handlePointerDown,
-            onTouchMove: handlePointerMove,
-            onTouchEnd: handlePointerUp
+            key: "cb1"
           }, [
             h("div", { className: "control-label", key: "cl1" }, [
-              h("span", { key: "txt" }, `GESER DI REL — ${Math.round(cannonX)}%`),
-              h("span", { key: "pos" }, "◀▶ POSISI")
+              h("span", { key: "s1" }, "GESER DI REL — ", Math.round(cannonX), "%"),
+              h("span", { key: "s2" }, "◀▶ POSISI")
             ]),
             h("div", { className: "slider-track", key: "st" }, [
               h("div", { className: "slider-fill", style: { width: `${cannonX}%` }, key: "sf" }),
-              h("div", { className: "slider-ticks", key: "stick" },
-                Array.from({ length: 9 }).map((_, i) => h("span", { key: i }))
-              ),
+              h("div", { className: "slider-ticks", key: "stk" }, Array.from({ length: 9 }).map((_, idx) => h("span", { key: idx }))),
               h("div", { className: "slider-thumb", style: { left: `${cannonX}%` }, key: "sth" }, "↔")
             ])
           ]),
 
-          h("div", { className: "control-box", key: "c2" }, [
+          h("div", { className: "control-box", key: "cb2" }, [
             h("div", { className: "control-label", key: "cl2" }, [
               h("span", { key: "s1" }, "TEMBAK! (Kanan)"),
               h("span", { key: "s2" }, "⎵ SPACE")
             ]),
-            h("button", {
-              className: "shoot-btn",
-              onPointerDown: (e) => {
-                e.preventDefault();
-                shoot();
-              },
-              onClick: (e) => e.preventDefault(),
-              key: "sbtn"
-            }, [
-              h("span", { key: "boom" }, "💥"),
-              ` TEMBAK ${currentQuestion.latin}!`
+            h("button", { className: "shoot-btn", onPointerDown: shoot, onClick: shoot, key: "sb" }, [
+              h("span", { key: "b" }, "💥"), " TEMBAK ", currentQuestion.latin, "!"
             ])
           ])
         ]),
 
-        // GAME OVER OVERLAY
+        // OVERLAY GAME OVER
         gameOver && h("div", { className: "overlay", key: "go" },
           h("div", { className: "modal" }, [
             h("div", { className: "jawa-title", key: "jt" }, "ꦒꦩꦺ ꦎꦮ꦳ꦼꦂ"),
-            h("h2", { style: { margin: "8px 0 4px" }, key: "title" }, "Game Over!"),
-            h("div", { style: { fontSize: 32, fontWeight: 800 }, key: "sc" }, `${score} poin`),
-            h("div", { style: { fontSize: 13, color: "#8d6e63", marginTop: 6 }, key: "lv" }, `Level tercapai: ${level}`),
-            topWrongList.length > 0 && h("div", { style: { textAlign: "left", marginTop: 14, background: "#fff3e0", borderRadius: 12, padding: 10, border: "1px solid #d7ccc8" }, key: "wr" }, [
-              h("div", { style: { fontWeight: 800, fontSize: 12, marginBottom: 6 }, key: "lbl" }, "SERING SALAH:"),
-              ...topWrongList.map(([key, count]) =>
-                h("div", { key, style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px dashed #d7ccc8" } }, [
-                  h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "k" }, key),
-                  h("span", { key: "c" }, `×${count}`)
+            h("h2", { style: { margin: "8px 0 4px" }, key: "h2" }, "Game Over!"),
+            h("div", { style: { fontSize: 32, fontWeight: 800 }, key: "sc" }, score, " poin"),
+            h("div", { style: { fontSize: 13, color: "#8d6e63", marginTop: 6 }, key: "lv" }, "Level tercapai: ", level),
+            topWrongList.length > 0 && h("div", { style: { textAlign: "left", marginTop: 14, background: "#fff3e0", borderRadius: 12, padding: 10, border: "1px solid #d7ccc8" }, key: "wl" }, [
+              h("div", { style: { fontWeight: 800, fontSize: 12, marginBottom: 6 }, key: "wlt" }, "SERING SALAH:"),
+              topWrongList.map(([k, val]) =>
+                h("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px dashed #d7ccc8" }, key: k }, [
+                  h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "s1" }, k),
+                  h("span", { key: "s2" }, "×", val)
                 ])
               )
             ]),
@@ -615,10 +483,10 @@ export function BedhilAksaraJawaGame() {
       ]),
 
       // SIDE PANEL
-      h("div", { className: "side-panel", key: "panel" }, [
-        h("div", { className: "card", key: "card1" }, [
-          h("h3", { key: "t1" }, "🎯 MODE GANTI KOTAK"),
-          h("div", { className: "toggle-row", key: "trow" }, [
+      h("div", { className: "side-panel", key: "sp" }, [
+        h("div", { className: "card", key: "c1" }, [
+          h("h3", { key: "h3" }, "🎯 MODE GANTI KOTAK"),
+          h("div", { className: "toggle-row", key: "tr" }, [
             h("button", { className: `toggle-btn ${targetMode === "jatuh" ? "active" : ""}`, onClick: () => setTargetMode("jatuh"), key: "b1" }, "JATUHKAN SAJA"),
             h("button", { className: `toggle-btn ${targetMode === "ganti" ? "active" : ""}`, onClick: () => setTargetMode("ganti"), key: "b2" }, "GANTI SEMUA")
           ]),
@@ -629,46 +497,44 @@ export function BedhilAksaraJawaGame() {
           )
         ]),
 
-        h("div", { className: "card", key: "card2" }, [
+        h("div", { className: "card", key: "c2" }, [
           h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, key: "hdr" }, [
-            h("h3", { key: "title" }, "📻 LEVEL"),
-            h("button", { className: "btn-secondary", style: { width: "auto", marginTop: 0, padding: "6px 10px", fontSize: 11 }, onClick: changeQuestion, key: "change" }, "GANTI SOAL")
+            h("h3", { key: "h3" }, "📻 LEVEL"),
+            h("button", { className: "btn-secondary", style: { width: "auto", marginTop: 0, padding: "6px 10px", fontSize: 11 }, onClick: changeQuestion, key: "chg" }, "GANTI SOAL")
           ]),
           h("div", { className: "level-dots", style: { marginTop: 8 }, key: "dots" },
             [1, 2, 3, 4].map((lvl) =>
               h("div", {
-                key: lvl,
                 className: `dot ${level === lvl ? "active" : ""}`,
                 onClick: () => {
                   setLevel(lvl);
-                  const q = createQuestion(lvl);
+                  let q = createQuestion(lvl);
                   setCurrentQuestion(q);
-                  const newT = generateTargets(q, lvl);
-                  targetsRef.current = newT;
-                  setTargets(newT);
-                }
+                  setTargets(generateTargets(q, lvl));
+                },
+                key: lvl
               }, lvl)
             )
           ),
-          h("div", { style: { fontSize: 11, marginTop: 8, lineHeight: 1.4, color: "#5d4037" }, key: "ldesc" },
-            level === 1 ? "Level 1: hanya A, I, U – tanpa cecak/layar." :
-            level === 2 ? "Level 2: tambah Ê pepet ꦼ, É taling ꦺ, O ꦺꦴ." :
-            level === 3 ? "Level 3: tambah NG ꦁ (cecak), R ꦂ (layar), H ꦃ (wignyan)." :
-            "Level 4: semua + RÊ ꦉ & LÊ ꦊ (pa cerek & nga lelet)."
-          ),
+          h("div", { style: { fontSize: 11, marginTop: 8, lineHeight: 1.4, color: "#5d4037" }, key: "ldesc" }, [
+            level === 1 && "Level 1: hanya A, I, U – tanpa cecak/layar.",
+            level === 2 && "Level 2: tambah Ê pepet ꦼ, É taling ꦺ, O ꦺꦴ.",
+            level === 3 && "Level 3: tambah NG ꦁ (cecak), R ꦂ (layar), H ꦃ (wignyan).",
+            level === 4 && "Level 4: semua + RÊ ꦉ & LÊ ꦊ (pa cerek & nga lelet)."
+          ]),
           h("div", { style: { marginTop: 10, background: "#efebe9", borderRadius: 10, padding: 8, fontSize: 12 }, key: "box" }, [
             h("div", { style: { fontWeight: 800, fontSize: 10, letterSpacing: "0.08em", marginBottom: 4 }, key: "lbl" }, "SAAT INI DITEMBAK:"),
             h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, key: "val" }, [
               h("span", { style: { fontWeight: 800, fontSize: 22 }, key: "lat" }, currentQuestion.latin),
               h("span", { style: { fontSize: 10, background: "#3e2723", color: "#ffecb3", padding: "4px 8px", borderRadius: 999, fontWeight: 700 }, key: "hint" }, "CARI DI ATAS!")
             ]),
-            h("div", { style: { fontSize: 10, color: "#8d6e63", marginTop: 4 }, key: "formula" }, `${currentQuestion.cons} + ${currentQuestion.vowel} + ${currentQuestion.suffix || "∅"} → ?`)
+            h("div", { style: { fontSize: 10, color: "#8d6e63", marginTop: 4 }, key: "formula" }, currentQuestion.cons, " + ", currentQuestion.vowel, " + ", currentQuestion.suffix || "∅", " → ?")
           ])
         ]),
 
-        h("div", { className: "card", key: "card3" }, [
+        h("div", { className: "card", key: "c3" }, [
           h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, key: "hdr" }, [
-            h("h3", { key: "title" }, "📜 PAUGERAN"),
+            h("h3", { key: "h3" }, "📜 PAUGERAN"),
             h("button", { onClick: () => setShowPaugeran((prev) => !prev), style: { border: 0, background: "#3e2723", color: "#ffecb3", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }, key: "btn" }, showPaugeran ? "TUTUP" : "BUKA")
           ]),
           !showPaugeran
@@ -692,13 +558,23 @@ export function BedhilAksaraJawaGame() {
                   h("b", { key: "b" }, "Urutan:"), " Aksara pokok + sandhangan swara + panyigeg.", h("br", { key: "br1" }),
                   "Contoh: ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "ex1" }, "ꦏꦁ"), " = Ka + cecak = KANG, ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "ex2" }, "ꦏꦶꦁ"), " = Ki + cecak = KING, ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "ex3" }, "ꦧꦼ"), " = BÊ, ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "ex4" }, "ꦧꦺ"), " = BÉ.", h("br", { key: "br2" }),
                   "RÊ dan LÊ punya pasangan sandhangan: ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "ex5" }, "ꦉꦶ ꦊꦸ ꦉꦺꦴ"), " dll."
-                ])
+                ]),
+                h("div", { style: { fontSize: 11, marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }, key: "examples" },
+                  [
+                    { l: "KA", j: "ꦏ" }, { l: "KI", j: "ꦏꦶ" }, { l: "KÊ", j: "ꦏꦼ" }, { l: "KÉ", j: "ꦏꦺ" }, { l: "KO", j: "ꦏꦺꦴ" },
+                    { l: "KANG", j: "ꦏꦁ" }, { l: "KAR", j: "ꦏꦂ" }, { l: "KAH", j: "ꦏꦃ" }, { l: "NGO", j: "ꦔꦺꦴ" }, { l: "THONG", j: "ꦛꦺꦴꦁ" }
+                  ].map((ex) =>
+                    h("span", { style: { background: "#efebe9", padding: "3px 7px", borderRadius: 999, border: "1px solid #d7ccc8" }, key: ex.l }, [
+                      ex.l, " = ", h("span", { style: { fontFamily: "Noto Sans Javanese" }, key: "j" }, ex.j)
+                    ])
+                  )
+                )
               ])
         ]),
 
-        h("div", { className: "card", style: { background: "#3e2723", color: "#ffecb3", borderColor: "#271c19" }, key: "card4" }, [
-          h("h3", { style: { color: "#ffcc80" }, key: "title" }, "🕹️ CARA MAIN"),
-          h("div", { style: { fontSize: 12, lineHeight: 1.6 }, key: "body" }, [
+        h("div", { className: "card", style: { background: "#3e2723", color: "#ffecb3", borderColor: "#271c19" }, key: "c4" }, [
+          h("h3", { style: { color: "#ffcc80" }, key: "h3" }, "🕹️ CARA MAIN"),
+          h("div", { style: { fontSize: 12, lineHeight: 1.6 }, key: "desc" }, [
             "1. Lihat huruf di meriam (contoh ", h("b", { key: "b1" }, "NGÊNG = ꦔꦼꦁ"), ")", h("br", { key: "br1" }),
             "2. Geser meriam pakai tangan kiri (drag / slider).", h("br", { key: "br2" }),
             "3. Tembak dengan tombol kanan / Spacebar.", h("br", { key: "br3" }),
@@ -708,14 +584,15 @@ export function BedhilAksaraJawaGame() {
       ])
     ]),
 
-    h("div", { key: "footer", style: { fontSize: 10, color: "#8d6e63", padding: "10px 0 24px", letterSpacing: "0.06em" } },
+    h("div", { style: { fontSize: 10, color: "#8d6e63", padding: "10px 0 24px", letterSpacing: "0.06em" }, key: "ftr" },
       "Dibuat dengan paugeran Mardikawi • Noto Sans Javanese • Bedhil Cetbang Jawa"
     )
   ]);
 }
 
+// RENDER KE DOM
 const rootElement = document.getElementById("root");
 if (rootElement) {
   const root = createRoot(rootElement);
-  root.render(h(BedhilAksaraJawaGame));
+  root.render(h(React.StrictMode, null, h(BedhilAksaraJawaGame)));
 }
