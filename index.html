@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Tembak Aksara Jawa</title>
 
   <!-- Google tag (gtag.js) -->
@@ -16,11 +16,14 @@
 
   <style>
     *, ::after, ::before { box-sizing: border-box; border: 0 solid #e5e7eb; }
-    html, body, #root { min-height: 100%; margin: 0; }
+    html, body, #root { min-height: 100%; margin: 0; padding: 0; touch-action: manipulation; }
     body {
       line-height: 1.5;
       font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow-x: hidden;
     }
     button, input, select, textarea { font-family: inherit; font-size: 100%; margin: 0; padding: 0; }
     button { cursor: pointer; background-color: transparent; background-image: none; }
