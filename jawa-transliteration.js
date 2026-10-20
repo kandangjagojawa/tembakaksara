@@ -36,9 +36,6 @@ export const VOWEL_CAPITALS = {
   "ê": "Ê", "é": "É", "è": "È", o: "O"
 };
 
-/**
- * Mengubah kombinasi konsonan, vokal, dan panyigeg ke Aksara Jawa.
- */
 export function toJavaneseScript(cons, vowel, suffix) {
   const base = AKSARA_KHUSUS[cons] ?? AKSARA_POKOK[cons] ?? "ꦏ";
   const sandhangan = SANDHANGAN_SWARA[vowel] ?? "";
@@ -46,9 +43,6 @@ export function toJavaneseScript(cons, vowel, suffix) {
   return base + sandhangan + panyigeg;
 }
 
-/**
- * Mengubah kombinasi konsonan, vokal, dan panyigeg ke teks Latin resmi.
- */
 export function toLatinText(cons, vowel, suffix) {
   let baseUpper;
   if (cons === "rê") baseUpper = "RÊ";
@@ -70,9 +64,6 @@ export function toLatinText(cons, vowel, suffix) {
   return baseUpper + vowelPart + suffixPart;
 }
 
-/**
- * Mengambil himpunan elemen soal berdasarkan tingkat kesulitan.
- */
 export function getQuestionElements(level) {
   let vowels = [];
   let suffixes = [];
@@ -122,9 +113,6 @@ export function getRandomPosition() {
   return 10 + Math.random() * 80;
 }
 
-/**
- * Membuat satu pertanyaan acak.
- */
 export function createQuestion(level, consOverride = null) {
   const elements = getQuestionElements(level);
   const cons = consOverride ?? getRandomElement(elements.cons);
@@ -144,9 +132,6 @@ export function createQuestion(level, consOverride = null) {
   };
 }
 
-/**
- * Membuat daftar 5 pilihan jawaban (1 benar, 4 salah) di posisi acak.
- */
 export function generateTargets(question, level) {
   const elements = getQuestionElements(level);
   const list = [{ ...question, isCorrect: true, x: 0 }];
