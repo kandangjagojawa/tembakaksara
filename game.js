@@ -10,7 +10,7 @@ import {
 
 const h = React.createElement;
 
-// Inisialisasi Soal Pertama Tunggal
+// Inisialisasi awal tunggal untuk menjamin kesesuaian soal & kotak
 const initialQuestion = createQuestion(1);
 
 export function BedhilAksaraJawaGame() {
@@ -19,7 +19,6 @@ export function BedhilAksaraJawaGame() {
   const [hearts, setHearts] = useState(3);
   const [targetMode, setTargetMode] = useState("jatuh");
 
-  // Soal & Target dijamin cocok 100% sejak pertama dimuat
   const [currentQuestion, setCurrentQuestion] = useState(initialQuestion);
   const [targets, setTargets] = useState(() => generateTargets(initialQuestion, 1));
   const [cannonX, setCannonX] = useState(50);
@@ -40,6 +39,7 @@ export function BedhilAksaraJawaGame() {
   const hitCorrectRef = useRef(() => {});
   const hitWrongRef = useRef(() => {});
 
+  // Update posisi meriam secara langsung tanpa lag
   const updateCannon = useCallback((val) => {
     setCannonX((prev) => {
       const nextVal = typeof val === "function" ? val(prev) : val;
@@ -65,12 +65,13 @@ export function BedhilAksaraJawaGame() {
     setHitEffect({ x: hitTarget.x, y: 22, text: "+10" });
     setTimeout(() => setHitEffect(null), 600);
 
-    // 1. Tandai HANYA target ini yang jatuh (tanpa memicu class shuffling)
-    setTargets((prev) =>
-      prev.map((t) => (t.id === hitTarget.id ? { ...t, falling: true } : t))
+    // Tandai langsung di Ref agar peluru lain dalam frame yang sama tidak memicu ulang
+    targetsRef.current = targetsRef.current.map((t) =>
+      t.id === hitTarget.id ? { ...t, falling: true } : t
     );
+    setTargets([...targetsRef.current]);
 
-    // 2. Setelah animasi jatuh selesai (280ms), baru acak dan ganti soal
+    // Beri jeda animasi jatuh sebelum mengacak soal baru
     setTimeout(() => {
       setIsShuffling(true);
       const activeLevel = level + (score >= 50 ? 1 : 0) > 4 ? 4 : level;
@@ -79,33 +80,34 @@ export function BedhilAksaraJawaGame() {
 
       if (targetMode === "ganti") {
         const newTargets = generateTargets(nextQ, activeLevel);
+        targetsRef.current = newTargets;
         setTargets(newTargets);
       } else {
-        setTargets((prevList) => {
-          const remaining = prevList
-            .filter((t) => t.id !== hitTarget.id && !t.falling)
-            .filter((t) => t.jawa !== nextQ.jawa);
+        const remaining = targetsRef.current
+          .filter((t) => t.id !== hitTarget.id && !t.falling)
+          .filter((t) => t.jawa !== nextQ.jawa);
 
-          const dummyList = [];
-          let safety = 0;
-          while (remaining.length + dummyList.length < 4 && safety < 100) {
-            safety++;
-            const candidate = createQuestion(activeLevel);
-            if (candidate.jawa === nextQ.jawa) continue;
-            if (remaining.some((item) => item.jawa === candidate.jawa)) continue;
-            if (dummyList.some((item) => item.jawa === candidate.jawa)) continue;
-            dummyList.push({ ...candidate, isCorrect: false, x: 0 });
-          }
+        const dummyList = [];
+        let safety = 0;
+        while (remaining.length + dummyList.length < 4 && safety < 100) {
+          safety++;
+          const candidate = createQuestion(activeLevel);
+          if (candidate.jawa === nextQ.jawa) continue;
+          if (remaining.some((item) => item.jawa === candidate.jawa)) continue;
+          if (dummyList.some((item) => item.jawa === candidate.jawa)) continue;
+          dummyList.push({ ...candidate, isCorrect: false, x: 0 });
+        }
 
-          const combined = [
-            ...[...remaining, ...dummyList].slice(0, 4),
-            { ...nextQ, isCorrect: true, x: 0 }
-          ];
+        const combined = [
+          ...[...remaining, ...dummyList].slice(0, 4),
+          { ...nextQ, isCorrect: true, x: 0 }
+        ];
 
-          const shuffled = shuffleArray(combined);
-          const pos = generateTargetPositions();
-          return shuffled.map((item, idx) => ({ ...item, x: pos[idx], falling: false }));
-        });
+        const shuffled = shuffleArray(combined);
+        const pos = generateTargetPositions();
+        const updated = shuffled.map((item, idx) => ({ ...item, x: pos[idx], falling: false }));
+        targetsRef.current = updated;
+        setTargets(updated);
       }
 
       updateCannon(getRandomPosition());
@@ -117,12 +119,16 @@ export function BedhilAksaraJawaGame() {
   }, [level, targetMode, score, updateCannon]);
 
   const handleHitWrong = useCallback((hitTarget) => {
-    setTargets((prev) =>
-      prev.map((t) => (t.id === hitTarget.id ? { ...t, shaking: true } : t))
+    targetsRef.current = targetsRef.current.map((t) =>
+      t.id === hitTarget.id ? { ...t, shaking: true } : t
     );
+    setTargets([...targetsRef.current]);
 
     setTimeout(() => {
-      setTargets((prev) => prev.map((t) => ({ ...t, shaking: false })));
+      targetsRef.current = targetsRef.current.map((t) =>
+        t.id === hitTarget.id ? { ...t, shaking: false } : t
+      );
+      setTargets([...targetsRef.current]);
     }, 400);
 
     setScore((prev) => Math.max(0, prev - 5));
@@ -146,7 +152,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // Detector Tabrakan Vertikal & Horizontal Presisi
+  // Deteksi Benturan Presisi Sekali Tembak (Hitbox Y 68% - 96% & Mutasi Instan)
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -157,18 +163,22 @@ export function BedhilAksaraJawaGame() {
       setProjectiles((prevProjectiles) => {
         const remaining = [];
         for (let proj of prevProjectiles) {
-          const nextY = proj.y + 3.5;
+          const nextY = proj.y + 3.8;
 
-          // Ketinggian vertikal kotak target berada pada y = 78% hingga 92%
-          if (nextY >= 78 && nextY <= 92) {
+          // Rentang X (±10%) dan Rentang Y Luas (68% - 96%) menjamin SEKALI TEMBAK LANGSUNG KENA
+          if (nextY >= 68 && nextY <= 96) {
             const candidates = targetsRef.current.filter(
-              (t) => !t.falling && Math.abs(t.x - proj.x) <= 9.0
+              (t) => !t.falling && Math.abs(t.x - proj.x) <= 10.0
             );
 
             if (candidates.length > 0) {
               candidates.sort((a, b) => Math.abs(a.x - proj.x) - Math.abs(b.x - proj.x));
-              hits.push(candidates[0]);
-              continue;
+              const hitTarget = candidates[0];
+              
+              // Kunci status falling secara mutatif agar peluru selanjutya tidak mengenai target yang sama
+              hitTarget.falling = true;
+              hits.push(hitTarget);
+              continue; // Peluru hilang
             }
           }
 
@@ -202,6 +212,7 @@ export function BedhilAksaraJawaGame() {
     setProjectiles((prev) => [...prev, { id: bulletId, x: cannonXRef.current, y: 26 }]);
   }, [gameOver]);
 
+  // Kontrol Keyboard (Desktop)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === "Space") {
@@ -220,15 +231,23 @@ export function BedhilAksaraJawaGame() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [shoot, updateCannon]);
 
+  // Kontrol Sentuh HP & Drag Slider Universal (Pointer Events)
+  const getClientX = (e) => {
+    if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
+    return e.clientX;
+  };
+
   const handlePointerDown = (e) => {
     isDraggingRef.current = true;
-    e.target.setPointerCapture(e.pointerId);
-    updateCannonPosition(e.clientX);
+    if (e.target.setPointerCapture && e.pointerId !== undefined) {
+      try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    updateCannonPosition(getClientX(e));
   };
 
   const handlePointerMove = (e) => {
     if (!isDraggingRef.current) return;
-    updateCannonPosition(e.clientX);
+    updateCannonPosition(getClientX(e));
   };
 
   const handlePointerUp = () => {
@@ -245,7 +264,9 @@ export function BedhilAksaraJawaGame() {
   const changeQuestion = () => {
     const q = createQuestion(level);
     setCurrentQuestion(q);
-    setTargets(generateTargets(q, level));
+    const newT = generateTargets(q, level);
+    targetsRef.current = newT;
+    setTargets(newT);
     updateCannon(getRandomPosition());
     setIsShuffling(true);
     setTimeout(() => setIsShuffling(false), 350);
@@ -259,7 +280,9 @@ export function BedhilAksaraJawaGame() {
     setWrongCounts({});
     const q = createQuestion(1);
     setCurrentQuestion(q);
-    setTargets(generateTargets(q, 1));
+    const newT = generateTargets(q, 1);
+    targetsRef.current = newT;
+    setTargets(newT);
     setProjectiles([]);
     updateCannon(50);
     setIsShuffling(false);
@@ -272,8 +295,8 @@ export function BedhilAksaraJawaGame() {
   return h("div", { className: "app-root" }, [
     h("style", { key: "css" }, `
       @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Javanese&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap');
-      * { box-sizing: border-box; }
-      body { margin:0; }
+      * { box-sizing: border-box; touch-action: manipulation; }
+      body { margin:0; overflow-x:hidden; }
       .app-root {
         min-height: 100vh;
         background:
@@ -303,16 +326,16 @@ export function BedhilAksaraJawaGame() {
       .stat-pill { background:#4e342e; border:1px solid #6d4c41; padding:6px 12px; border-radius:999px; font-size:13px; display:flex; gap:6px; align-items:center }
       .hearts { letter-spacing:2px }
       .game-shell { width:100%; max-width:1100px; display:grid; grid-template-columns: 1fr 300px; gap:16px; padding:16px; }
-      @media (max-width: 860px) { .game-shell { grid-template-columns:1fr; } }
+      @media (max-width: 860px) { .game-shell { grid-template-columns:1fr; padding:8px; } }
       .game-area {
         position:relative; height: 600px;
         background: linear-gradient(180deg, #fff8e1 0%, #ffe0b2 32%, #f5d0a0 62%, #d7a76f 100%);
         border-radius: 18px; overflow:hidden; border: 3px solid #5d4037;
         box-shadow: inset 0 0 0 4px #ffecb3, 0 12px 30px rgba(62,39,35,0.18);
-        display:flex; flex-direction:column;
+        display:flex; flex-direction:column; touch-action: none;
       }
-      @media (max-width: 600px) { .game-area { height: 620px; } }
-      .field-top { position:relative; flex:1; min-height: 360px; }
+      @media (max-width: 600px) { .game-area { height: 560px; } }
+      .field-top { position:relative; flex:1; min-height: 320px; }
       .target-row { position:absolute; top:18px; left:0; right:0; height:110px; }
       .target-box {
         position:absolute; top:0; width: 84px; height: 92px; transform: translateX(-50%);
@@ -328,7 +351,7 @@ export function BedhilAksaraJawaGame() {
         transform: translateX(-50%) translateY(350px) rotate(25deg) scale(0.5) !important;
         opacity: 0 !important;
         pointer-events: none;
-        transition: transform 0.35s ease-in, opacity 0.3s ease-in;
+        transition: transform 0.35s ease-in, opacity 0.3s ease-in !important;
       }
       .target-box.shaking { animation: shake 0.36s ease; }
       .target-box.shuffling { transition: left 0.42s cubic-bezier(.34,1.56,.64,1), transform 0.32s ease; z-index: 2; animation: shufflePop 0.42s ease; }
@@ -396,9 +419,9 @@ export function BedhilAksaraJawaGame() {
       }
       .hit-effect { position:absolute; transform:translateX(-50%); font-weight:800; font-size:20px; color:#bf360c; text-shadow: 0 1px 0 #fff; animation: pop 0.6s ease forwards; pointer-events:none; z-index:8; }
       @keyframes pop { 0%{ transform:translateX(-50%) translateY(0) scale(0.6); opacity:0 } 20%{ opacity:1; transform:translateX(-50%) translateY(-8px) scale(1.2)} 100%{ opacity:0; transform:translateX(-50%) translateY(-36px) scale(1)} }
-      .controls { display:grid; grid-template-columns: 1.3fr 0.9fr; gap:12px; padding:12px 12px 14px; background: linear-gradient(180deg, #fff8e1 0%, #ffecb3 100%); border-top:3px solid #5d4037; z-index:10; border-radius: 0 0 15px 15px; }
+      .controls { display:grid; grid-template-columns: 1.3fr 0.9fr; gap:12px; padding:12px 12px 14px; background: linear-gradient(180deg, #fff8e1 0%, #ffecb3 100%); border-top:3px solid #5d4037; z-index:10; border-radius: 0 0 15px 15px; touch-action:none; }
       @media (max-width: 600px) { .controls { grid-template-columns:1fr; } }
-      .control-box { border:2px dashed #a1887f; border-radius:14px; padding:10px; background: #ffffffb8; backdrop-filter: blur(4px); touch-action:none; user-select:none; }
+      .control-box { border:2px dashed #a1887f; border-radius:14px; padding:10px; background: #ffffffb8; backdrop-filter: blur(4px); touch-action:none; user-select:none; -webkit-user-select:none; }
       .control-label { font-size:11px; font-weight:800; letter-spacing:0.08em; color:#6d4c41; margin-bottom:6px; display:flex; justify-content:space-between }
       .slider-track { height:52px; background: linear-gradient(90deg, #efebe9, #d7ccc8); border:2px solid #8d6e63; border-radius:999px; position:relative; overflow:hidden; cursor: ew-resize; touch-action:none; }
       .slider-fill { position:absolute; left:0; top:0; bottom:0; background: linear-gradient(90deg, rgba(255,179,0,0.25), rgba(255,111,0,0.15)); border-right:2px solid #ff6f00; }
@@ -414,7 +437,7 @@ export function BedhilAksaraJawaGame() {
         width:100%; height:62px; background: linear-gradient(180deg, #ff6f00 0%, #e65100 100%);
         border:3px solid #1c110f; border-radius:14px; font-weight:900; font-size:17px; color:#fff8e1; letter-spacing:0.06em;
         box-shadow: 0 6px 0 #1c110f, 0 8px 16px rgba(0,0,0,0.22); cursor:pointer; touch-action: manipulation;
-        display:flex; align-items:center; justify-content:center; gap:8px;
+        display:flex; align-items:center; justify-content:center; gap:8px; user-select:none; -webkit-user-select:none;
       }
       .shoot-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #3e2723; }
       .side-panel { display:flex; flex-direction:column; gap:12px; }
@@ -439,12 +462,12 @@ export function BedhilAksaraJawaGame() {
         .header { padding:10px 14px }
         .brand .latin { font-size:14px }
         .brand .jawa { font-size:16px }
-        .target-box { width:64px; height:72px; font-size:28px }
-        .cannon-wrap { width:190px; height:132px }
-        .cannon-body { width:160px; height:74px }
-        .plaque-latin { font-size:22px }
-        .cannon-wheels { gap:58px }
-        .wheel { width:32px; height:32px }
+        .target-box { width:62px; height:70px; font-size:26px }
+        .cannon-wrap { width:170px; height:120px }
+        .cannon-body { width:150px; height:68px }
+        .plaque-latin { font-size:20px }
+        .cannon-wheels { gap:52px }
+        .wheel { width:28px; height:28px }
       }
     `),
 
@@ -473,7 +496,6 @@ export function BedhilAksaraJawaGame() {
             ...targets.map((t) =>
               h("div", {
                 key: t.id,
-                // Mencegah penambahan class shuffling jika target sedang falling
                 className: `target-box ${t.falling ? "falling" : ""} ${t.shaking ? "shaking" : ""} ${!t.falling && (t.shuffling || isShuffling) ? "shuffling" : ""}`,
                 style: { left: `${t.x}%`, animationDelay: `${(t.x % 7) * 0.2}s` }
               }, t.jawa)
@@ -537,7 +559,10 @@ export function BedhilAksaraJawaGame() {
             onPointerDown: handlePointerDown,
             onPointerMove: handlePointerMove,
             onPointerUp: handlePointerUp,
-            onPointerLeave: handlePointerUp
+            onPointerLeave: handlePointerUp,
+            onTouchStart: handlePointerDown,
+            onTouchMove: handlePointerMove,
+            onTouchEnd: handlePointerUp
           }, [
             h("div", { className: "control-label", key: "cl1" }, [
               h("span", { key: "txt" }, `GESER DI REL — ${Math.round(cannonX)}%`),
@@ -557,7 +582,16 @@ export function BedhilAksaraJawaGame() {
               h("span", { key: "s1" }, "TEMBAK! (Kanan)"),
               h("span", { key: "s2" }, "⎵ SPACE")
             ]),
-            h("button", { className: "shoot-btn", onClick: shoot, key: "sbtn" }, [
+            // Menggunakan pemicu sentuhan instan onPointerDown + preventDefault untuk membuang 300ms delay HP
+            h("button", {
+              className: "shoot-btn",
+              onPointerDown: (e) => {
+                e.preventDefault();
+                shoot();
+              },
+              onClick: (e) => e.preventDefault(),
+              key: "sbtn"
+            }, [
               h("span", { key: "boom" }, "💥"),
               ` TEMBAK ${currentQuestion.latin}!`
             ])
@@ -614,7 +648,9 @@ export function BedhilAksaraJawaGame() {
                   setLevel(lvl);
                   const q = createQuestion(lvl);
                   setCurrentQuestion(q);
-                  setTargets(generateTargets(q, lvl));
+                  const newT = generateTargets(q, lvl);
+                  targetsRef.current = newT;
+                  setTargets(newT);
                 }
               }, lvl)
             )
