@@ -10,14 +10,18 @@ import {
 
 const h = React.createElement;
 
+// Inisialisasi Soal Pertama Tunggal
+const initialQuestion = createQuestion(1);
+
 export function BedhilAksaraJawaGame() {
   const [level, setLevel] = useState(1);
   const [score, setScore] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [targetMode, setTargetMode] = useState("jatuh");
 
-  const [currentQuestion, setCurrentQuestion] = useState(() => createQuestion(1));
-  const [targets, setTargets] = useState(() => generateTargets(createQuestion(1), 1));
+  // Soal & Target dijamin cocok 100% sejak pertama dimuat
+  const [currentQuestion, setCurrentQuestion] = useState(initialQuestion);
+  const [targets, setTargets] = useState(() => generateTargets(initialQuestion, 1));
   const [cannonX, setCannonX] = useState(50);
   const [projectiles, setProjectiles] = useState([]);
 
@@ -36,7 +40,6 @@ export function BedhilAksaraJawaGame() {
   const hitCorrectRef = useRef(() => {});
   const hitWrongRef = useRef(() => {});
 
-  // Fungsi Sinkronisasi Instan Posisi Meriam (State & Ref Diperbarui Bersamaan)
   const updateCannon = useCallback((val) => {
     setCannonX((prev) => {
       const nextVal = typeof val === "function" ? val(prev) : val;
@@ -50,12 +53,6 @@ export function BedhilAksaraJawaGame() {
     targetsRef.current = targets;
   }, [targets]);
 
-  useEffect(() => {
-    const q = createQuestion(level);
-    setCurrentQuestion(q);
-    setTargets(generateTargets(q, level));
-  }, []);
-
   const handleHitCorrect = useCallback((hitTarget) => {
     setScore((prevScore) => {
       const nextScore = prevScore + 10;
@@ -67,22 +64,22 @@ export function BedhilAksaraJawaGame() {
 
     setHitEffect({ x: hitTarget.x, y: 22, text: "+10" });
     setTimeout(() => setHitEffect(null), 600);
-    setIsShuffling(true);
 
+    // 1. Tandai HANYA target ini yang jatuh (tanpa memicu class shuffling)
     setTargets((prev) =>
-      prev.map((t) => (t.id === hitTarget.id ? { ...t, falling: true } : { ...t, shuffling: true }))
+      prev.map((t) => (t.id === hitTarget.id ? { ...t, falling: true } : t))
     );
 
+    // 2. Setelah animasi jatuh selesai (280ms), baru acak dan ganti soal
     setTimeout(() => {
-      const activeLevel = level + (score > 50 ? 1 : 0) > 4 ? 4 : level;
+      setIsShuffling(true);
+      const activeLevel = level + (score >= 50 ? 1 : 0) > 4 ? 4 : level;
       const nextQ = createQuestion(activeLevel);
       setCurrentQuestion(nextQ);
 
       if (targetMode === "ganti") {
         const newTargets = generateTargets(nextQ, activeLevel);
-        const shuffled = shuffleArray(newTargets);
-        const pos = generateTargetPositions();
-        setTargets(shuffled.map((item, i) => ({ ...item, x: pos[i], falling: false })));
+        setTargets(newTargets);
       } else {
         setTargets((prevList) => {
           const remaining = prevList
@@ -115,9 +112,8 @@ export function BedhilAksaraJawaGame() {
 
       setTimeout(() => {
         setIsShuffling(false);
-        setTargets((prev) => prev.map((item) => ({ ...item, shuffling: false })));
-      }, 380);
-    }, 300);
+      }, 350);
+    }, 280);
   }, [level, targetMode, score, updateCannon]);
 
   const handleHitWrong = useCallback((hitTarget) => {
@@ -150,7 +146,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // Deteksi Benturan Presisi & Respon Sekali Tembak
+  // Detector Tabrakan Vertikal & Horizontal Presisi
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -161,11 +157,12 @@ export function BedhilAksaraJawaGame() {
       setProjectiles((prevProjectiles) => {
         const remaining = [];
         for (let proj of prevProjectiles) {
-          const nextY = proj.y + 3.4;
-          if (nextY > 80) {
-            // Toleransi Hitbox 9.5% dari pusat kotak target
+          const nextY = proj.y + 3.5;
+
+          // Ketinggian vertikal kotak target berada pada y = 78% hingga 92%
+          if (nextY >= 78 && nextY <= 92) {
             const candidates = targetsRef.current.filter(
-              (t) => !t.falling && Math.abs(t.x - proj.x) <= 9.5
+              (t) => !t.falling && Math.abs(t.x - proj.x) <= 9.0
             );
 
             if (candidates.length > 0) {
@@ -173,9 +170,8 @@ export function BedhilAksaraJawaGame() {
               hits.push(candidates[0]);
               continue;
             }
-
-            if (nextY > 96) continue;
           }
+
           if (nextY <= 96) {
             remaining.push({ ...proj, y: nextY });
           }
@@ -203,7 +199,6 @@ export function BedhilAksaraJawaGame() {
     setIsRecoil(true);
     setTimeout(() => setIsRecoil(false), 180);
 
-    // Ambil posisi persis meriam secara sinkronus
     setProjectiles((prev) => [...prev, { id: bulletId, x: cannonXRef.current, y: 26 }]);
   }, [gameOver]);
 
@@ -329,7 +324,12 @@ export function BedhilAksaraJawaGame() {
         transition: left 0.45s cubic-bezier(.2,.8,.2,1), transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.28s;
         animation: float 3s ease-in-out infinite; will-change: left, transform;
       }
-      .target-box.falling { transform: translateX(-50%) translateY(380px) rotate(22deg) scale(0.7); opacity:0; }
+      .target-box.falling {
+        transform: translateX(-50%) translateY(350px) rotate(25deg) scale(0.5) !important;
+        opacity: 0 !important;
+        pointer-events: none;
+        transition: transform 0.35s ease-in, opacity 0.3s ease-in;
+      }
       .target-box.shaking { animation: shake 0.36s ease; }
       .target-box.shuffling { transition: left 0.42s cubic-bezier(.34,1.56,.64,1), transform 0.32s ease; z-index: 2; animation: shufflePop 0.42s ease; }
       @keyframes shufflePop { 0% { transform: translateX(-50%) scale(1); } 40% { transform: translateX(-50%) scale(1.08) translateY(-8px); } 100% { transform: translateX(-50%) scale(1); } }
@@ -473,7 +473,8 @@ export function BedhilAksaraJawaGame() {
             ...targets.map((t) =>
               h("div", {
                 key: t.id,
-                className: `target-box ${t.falling ? "falling" : ""} ${t.shaking ? "shaking" : ""} ${t.shuffling || isShuffling ? "shuffling" : ""}`,
+                // Mencegah penambahan class shuffling jika target sedang falling
+                className: `target-box ${t.falling ? "falling" : ""} ${t.shaking ? "shaking" : ""} ${!t.falling && (t.shuffling || isShuffling) ? "shuffling" : ""}`,
                 style: { left: `${t.x}%`, animationDelay: `${(t.x % 7) * 0.2}s` }
               }, t.jawa)
             ),
@@ -556,7 +557,6 @@ export function BedhilAksaraJawaGame() {
               h("span", { key: "s1" }, "TEMBAK! (Kanan)"),
               h("span", { key: "s2" }, "⎵ SPACE")
             ]),
-            // Hanya menggunakan onClick untuk mencegah tembakan ganda saat disentuh
             h("button", { className: "shoot-btn", onClick: shoot, key: "sbtn" }, [
               h("span", { key: "boom" }, "💥"),
               ` TEMBAK ${currentQuestion.latin}!`
