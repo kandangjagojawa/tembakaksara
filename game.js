@@ -144,7 +144,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // PERBAIKAN: Logika tabrakan presisi (radius 5.5% & mengambil target terdekat)
+  // Detector tabrakan presisi (radius 8.5% sesuai lebar visual kotak & ambil target terdekat)
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -157,16 +157,14 @@ export function BedhilAksaraJawaGame() {
         for (let proj of prevProjectiles) {
           const nextY = proj.y + 3.4;
           if (nextY > 82) {
-            // Filter target yang berada dalam radius presisi 5.5%
             const candidates = targetsRef.current.filter(
-              (t) => !t.falling && Math.abs(t.x - proj.x) <= 5.5
+              (t) => !t.falling && Math.abs(t.x - proj.x) <= 8.5
             );
 
             if (candidates.length > 0) {
-              // Urutkan kandidat berdasarkan jarak terdekat dari sumbu peluru
               candidates.sort((a, b) => Math.abs(a.x - proj.x) - Math.abs(b.x - proj.x));
               hits.push(candidates[0]);
-              continue; // Hapus peluru
+              continue;
             }
 
             if (nextY > 96) continue;
@@ -348,7 +346,7 @@ export function BedhilAksaraJawaGame() {
       .cannon-wrap {
         position:absolute; bottom:28px; width: 220px; height: 150px; transform: translateX(-50%);
         display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
-        transition: left 0.12s cubic-bezier(.2,.8,.2,1); z-index:6; pointer-events:none; filter: drop-shadow(0 12px 10px rgba(0,0,0,0.25));
+        z-index:6; pointer-events:none; filter: drop-shadow(0 12px 10px rgba(0,0,0,0.25));
       }
       .cannon-wrap.recoil { animation: recoil 0.18s ease; }
       .cannon-wrap.jump { transition: left 0.38s cubic-bezier(.34,1.56,.64,1); }
@@ -357,10 +355,10 @@ export function BedhilAksaraJawaGame() {
       .laser {
         position:absolute; bottom:130px; width:2px; top:90px; transform: translateX(-50%);
         background: repeating-linear-gradient(180deg, rgba(255,235,59,0.9) 0 10px, transparent 10px 18px);
-        box-shadow: 0 0 8px rgba(255,235,59,0.8), 0 0 18px rgba(255,111,0,0.6); z-index:4; pointer-events:none; transition: left 0.12s cubic-bezier(.2,.8,.2,1);
+        box-shadow: 0 0 8px rgba(255,235,59,0.8), 0 0 18px rgba(255,111,0,0.6); z-index:4; pointer-events:none;
       }
       .laser::after { content:""; position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:10px solid #ffeb3b; filter: drop-shadow(0 0 6px #ffeb3b); }
-      .position-arrow { position:absolute; bottom:50px; width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:12px solid #ff6f00; transform: translateX(-50%); filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); transition: left 0.12s cubic-bezier(.2,.8,.2,1); z-index:7; }
+      .position-arrow { position:absolute; bottom:50px; width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:12px solid #ff6f00; transform: translateX(-50%); filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); z-index:7; }
       .cannon-visual { position:relative; width:100%; height:116px; display:flex; flex-direction:column; align-items:center; }
       .cannon-mouth { position:relative; width: 54px; height: 30px; background: radial-gradient(ellipse at center, #1a1a1a 0%, #000 65%); border: 3px solid #2b1a14; border-bottom:0; border-radius: 12px 12px 4px 4px; box-shadow: inset 0 4px 8px rgba(255,255,255,0.15), 0 -2px 0 #ffcc80; z-index:3; }
       .cannon-mouth::after { content:""; position:absolute; inset:5px; background: radial-gradient(ellipse at center, #3e2723 0%, #000 80%); border-radius: 8px 8px 2px 2px; }
@@ -479,10 +477,7 @@ export function BedhilAksaraJawaGame() {
           h("div", {
             key: "laser",
             className: "laser",
-            style: {
-              left: `${cannonX}%`,
-              transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)"
-            }
+            style: { left: `${cannonX}%` }
           }),
 
           // PROJECTILES
@@ -493,10 +488,7 @@ export function BedhilAksaraJawaGame() {
           h("div", {
             key: "arrow",
             className: "position-arrow",
-            style: {
-              left: `${cannonX}%`,
-              transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)"
-            }
+            style: { left: `${cannonX}%` }
           })
         ]),
 
@@ -510,10 +502,7 @@ export function BedhilAksaraJawaGame() {
           h("div", {
             key: "cannon",
             className: `cannon-wrap ${isRecoil ? "recoil" : ""} ${isShuffling ? "jump" : ""}`,
-            style: {
-              left: `${cannonX}%`,
-              transition: isShuffling ? "left 0.38s cubic-bezier(.34,1.56,.64,1)" : "left 0.12s cubic-bezier(.2,.8,.2,1)"
-            }
+            style: { left: `${cannonX}%` }
           }, [
             h("div", { className: "cannon-shadow", key: "cs" }),
             h("div", { className: "cannon-visual", key: "cv" }, [
