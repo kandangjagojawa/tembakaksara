@@ -144,7 +144,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // OPTIMISASI GAME LOOP: Bermalam/Dormant jika tidak ada peluru
+  // PERBAIKAN: Logika tabrakan presisi (radius 5.5% & mengambil target terdekat)
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -157,13 +157,18 @@ export function BedhilAksaraJawaGame() {
         for (let proj of prevProjectiles) {
           const nextY = proj.y + 3.4;
           if (nextY > 82) {
-            const targetHit = targetsRef.current.find(
-              (t) => !t.falling && Math.abs(t.x - proj.x) < 11
+            // Filter target yang berada dalam radius presisi 5.5%
+            const candidates = targetsRef.current.filter(
+              (t) => !t.falling && Math.abs(t.x - proj.x) <= 5.5
             );
-            if (targetHit) {
-              hits.push(targetHit);
-              continue;
+
+            if (candidates.length > 0) {
+              // Urutkan kandidat berdasarkan jarak terdekat dari sumbu peluru
+              candidates.sort((a, b) => Math.abs(a.x - proj.x) - Math.abs(b.x - proj.x));
+              hits.push(candidates[0]);
+              continue; // Hapus peluru
             }
+
             if (nextY > 96) continue;
           }
           if (nextY <= 96) {
