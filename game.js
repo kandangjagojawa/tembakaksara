@@ -10,7 +10,6 @@ import {
 
 const h = React.createElement;
 
-// Inisialisasi awal tunggal untuk menjamin kesesuaian soal & kotak
 const initialQuestion = createQuestion(1);
 
 export function BedhilAksaraJawaGame() {
@@ -39,7 +38,6 @@ export function BedhilAksaraJawaGame() {
   const hitCorrectRef = useRef(() => {});
   const hitWrongRef = useRef(() => {});
 
-  // Update posisi meriam secara langsung tanpa lag
   const updateCannon = useCallback((val) => {
     setCannonX((prev) => {
       const nextVal = typeof val === "function" ? val(prev) : val;
@@ -65,13 +63,11 @@ export function BedhilAksaraJawaGame() {
     setHitEffect({ x: hitTarget.x, y: 22, text: "+10" });
     setTimeout(() => setHitEffect(null), 600);
 
-    // Tandai langsung di Ref agar peluru lain dalam frame yang sama tidak memicu ulang
     targetsRef.current = targetsRef.current.map((t) =>
       t.id === hitTarget.id ? { ...t, falling: true } : t
     );
     setTargets([...targetsRef.current]);
 
-    // Beri jeda animasi jatuh sebelum mengacak soal baru
     setTimeout(() => {
       setIsShuffling(true);
       const activeLevel = level + (score >= 50 ? 1 : 0) > 4 ? 4 : level;
@@ -152,7 +148,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // Deteksi Benturan Presisi Sekali Tembak (Hitbox Y 68% - 96% & Mutasi Instan)
+  // Deteksi Fisika: Hanya set falling jika BENAR
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -165,7 +161,6 @@ export function BedhilAksaraJawaGame() {
         for (let proj of prevProjectiles) {
           const nextY = proj.y + 3.8;
 
-          // Rentang X (±10%) dan Rentang Y Luas (68% - 96%) menjamin SEKALI TEMBAK LANGSUNG KENA
           if (nextY >= 68 && nextY <= 96) {
             const candidates = targetsRef.current.filter(
               (t) => !t.falling && Math.abs(t.x - proj.x) <= 10.0
@@ -175,10 +170,13 @@ export function BedhilAksaraJawaGame() {
               candidates.sort((a, b) => Math.abs(a.x - proj.x) - Math.abs(b.x - proj.x));
               const hitTarget = candidates[0];
               
-              // Kunci status falling secara mutatif agar peluru selanjutya tidak mengenai target yang sama
-              hitTarget.falling = true;
+              // HANYA tandai jatuh jika target BENAR
+              if (hitTarget.isCorrect) {
+                hitTarget.falling = true;
+              }
+              
               hits.push(hitTarget);
-              continue; // Peluru hilang
+              continue; // Peluru hancur
             }
           }
 
@@ -212,7 +210,6 @@ export function BedhilAksaraJawaGame() {
     setProjectiles((prev) => [...prev, { id: bulletId, x: cannonXRef.current, y: 26 }]);
   }, [gameOver]);
 
-  // Kontrol Keyboard (Desktop)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.code === "Space") {
@@ -231,7 +228,6 @@ export function BedhilAksaraJawaGame() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [shoot, updateCannon]);
 
-  // Kontrol Sentuh HP & Drag Slider Universal (Pointer Events)
   const getClientX = (e) => {
     if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
     return e.clientX;
@@ -582,7 +578,6 @@ export function BedhilAksaraJawaGame() {
               h("span", { key: "s1" }, "TEMBAK! (Kanan)"),
               h("span", { key: "s2" }, "⎵ SPACE")
             ]),
-            // Menggunakan pemicu sentuhan instan onPointerDown + preventDefault untuk membuang 300ms delay HP
             h("button", {
               className: "shoot-btn",
               onPointerDown: (e) => {
