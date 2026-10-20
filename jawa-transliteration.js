@@ -100,13 +100,10 @@ export function shuffleArray(arr) {
   return result;
 }
 
+// PERBAIKAN: Gunakan kisi posisi tetap tanpa jitter agar kotak tidak pernah bertumpuk
 export function generateTargetPositions() {
-  const bases = [11, 31, 50, 69, 89];
-  const shifted = bases.map((x) => {
-    const jitter = (Math.random() - 0.5) * 10;
-    return Math.max(7, Math.min(93, x + jitter));
-  });
-  return shuffleArray(shifted);
+  const positions = [10, 29, 48, 67, 86];
+  return shuffleArray(positions);
 }
 
 export function getRandomPosition() {
