@@ -31,18 +31,24 @@ export function BedhilAksaraJawaGame() {
 
   const gameAreaRef = useRef(null);
   const targetsRef = useRef(targets);
-  const cannonXRef = useRef(cannonX);
+  const cannonXRef = useRef(50);
   const isDraggingRef = useRef(false);
   const hitCorrectRef = useRef(() => {});
   const hitWrongRef = useRef(() => {});
 
+  // Fungsi Sinkronisasi Instan Posisi Meriam (State & Ref Diperbarui Bersamaan)
+  const updateCannon = useCallback((val) => {
+    setCannonX((prev) => {
+      const nextVal = typeof val === "function" ? val(prev) : val;
+      const clamped = Math.max(6, Math.min(94, nextVal));
+      cannonXRef.current = clamped;
+      return clamped;
+    });
+  }, []);
+
   useEffect(() => {
     targetsRef.current = targets;
   }, [targets]);
-
-  useEffect(() => {
-    cannonXRef.current = cannonX;
-  }, [cannonX]);
 
   useEffect(() => {
     const q = createQuestion(level);
@@ -105,14 +111,14 @@ export function BedhilAksaraJawaGame() {
         });
       }
 
-      setCannonX(getRandomPosition());
+      updateCannon(getRandomPosition());
 
       setTimeout(() => {
         setIsShuffling(false);
         setTargets((prev) => prev.map((item) => ({ ...item, shuffling: false })));
       }, 380);
     }, 300);
-  }, [level, targetMode, score]);
+  }, [level, targetMode, score, updateCannon]);
 
   const handleHitWrong = useCallback((hitTarget) => {
     setTargets((prev) =>
@@ -144,7 +150,7 @@ export function BedhilAksaraJawaGame() {
     hitWrongRef.current = handleHitWrong;
   }, [handleHitCorrect, handleHitWrong]);
 
-  // Detector tabrakan presisi (radius 8.5% sesuai lebar visual kotak & ambil target terdekat)
+  // Deteksi Benturan Presisi & Respon Sekali Tembak
   useEffect(() => {
     if (projectiles.length === 0) return;
 
@@ -156,9 +162,10 @@ export function BedhilAksaraJawaGame() {
         const remaining = [];
         for (let proj of prevProjectiles) {
           const nextY = proj.y + 3.4;
-          if (nextY > 82) {
+          if (nextY > 80) {
+            // Toleransi Hitbox 9.5% dari pusat kotak target
             const candidates = targetsRef.current.filter(
-              (t) => !t.falling && Math.abs(t.x - proj.x) <= 8.5
+              (t) => !t.falling && Math.abs(t.x - proj.x) <= 9.5
             );
 
             if (candidates.length > 0) {
@@ -196,6 +203,7 @@ export function BedhilAksaraJawaGame() {
     setIsRecoil(true);
     setTimeout(() => setIsRecoil(false), 180);
 
+    // Ambil posisi persis meriam secara sinkronus
     setProjectiles((prev) => [...prev, { id: bulletId, x: cannonXRef.current, y: 26 }]);
   }, [gameOver]);
 
@@ -206,16 +214,16 @@ export function BedhilAksaraJawaGame() {
         shoot();
       }
       if (e.code === "ArrowLeft") {
-        setCannonX((prev) => Math.max(5, prev - 6));
+        updateCannon((prev) => prev - 6);
       }
       if (e.code === "ArrowRight") {
-        setCannonX((prev) => Math.min(95, prev + 6));
+        updateCannon((prev) => prev + 6);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shoot]);
+  }, [shoot, updateCannon]);
 
   const handlePointerDown = (e) => {
     isDraggingRef.current = true;
@@ -236,14 +244,14 @@ export function BedhilAksaraJawaGame() {
     if (!gameAreaRef.current) return;
     const rect = gameAreaRef.current.getBoundingClientRect();
     const percent = ((clientX - rect.left) / rect.width) * 100;
-    setCannonX(Math.max(6, Math.min(94, percent)));
+    updateCannon(percent);
   };
 
   const changeQuestion = () => {
     const q = createQuestion(level);
     setCurrentQuestion(q);
     setTargets(generateTargets(q, level));
-    setCannonX(getRandomPosition());
+    updateCannon(getRandomPosition());
     setIsShuffling(true);
     setTimeout(() => setIsShuffling(false), 350);
   };
@@ -258,7 +266,7 @@ export function BedhilAksaraJawaGame() {
     setCurrentQuestion(q);
     setTargets(generateTargets(q, 1));
     setProjectiles([]);
-    setCannonX(50);
+    updateCannon(50);
     setIsShuffling(false);
   };
 
@@ -548,7 +556,8 @@ export function BedhilAksaraJawaGame() {
               h("span", { key: "s1" }, "TEMBAK! (Kanan)"),
               h("span", { key: "s2" }, "⎵ SPACE")
             ]),
-            h("button", { className: "shoot-btn", onPointerDown: shoot, onClick: shoot, key: "sbtn" }, [
+            // Hanya menggunakan onClick untuk mencegah tembakan ganda saat disentuh
+            h("button", { className: "shoot-btn", onClick: shoot, key: "sbtn" }, [
               h("span", { key: "boom" }, "💥"),
               ` TEMBAK ${currentQuestion.latin}!`
             ])
